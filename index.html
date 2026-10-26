@@ -1,0 +1,1528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Traveller's Log</title>
+<meta name="description" content="Log the star systems, planets, moons and finds from your No Man's Sky travels.">
+<meta name="theme-color" content="#100E22" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F3F1F9" media="(prefers-color-scheme: light)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Traveller's Log">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<script>
+// iPhone and iPad: a home-screen app's status bar text is always white, so the CSS keeps a dark strip behind it
+if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) document.documentElement.classList.add('ios');
+</script>
+<style>
+/* Layout: one-column phone app (max 640px). Sticky top bar, scrolling view, fixed bottom tabs,
+   floating Add button, bottom-sheet forms. Dark-first deep-space hull with a sunset-orange flare. */
+:root{
+  color-scheme: dark;
+  --void:#100E22; --hull:#1B1934; --hull-2:#27243F; --line:#3A355E; --line-soft:#2B2848;
+  --text:#EFEBFA; --muted:#A6A1C4; --faint:#7C779B;
+  --flare:#FF8B4E; --flare-ink:#1C0E04; --flare-soft:rgba(255,139,78,.13);
+  --scan:#62D8D1; --danger:#FF6F7D; --warn:#FFC857;
+  --star-yellow:#FFD45C; --star-red:#FF6A4D; --star-green:#6EE07A; --star-blue:#6FAEFF; --star-purple:#BD8EFF;
+  --shadow:0 12px 32px rgba(0,0,0,.45);
+  --scrim:rgba(6,5,16,.66); --lightbox:rgba(5,4,12,.94); --on-photo:#FFFFFF;
+  --f-display:"Chakra Petch","Bahnschrift","Segoe UI",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --r-m:12px; --r-l:18px; --tabbar-h:62px;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    color-scheme: light;
+    --void:#F3F1F9; --hull:#FFFFFF; --hull-2:#ECE9F5; --line:#D3CEE5; --line-soft:#E3DFEE;
+    --text:#1A1834; --muted:#5D5880; --faint:#8984A6;
+    --flare:#C2501A; --flare-ink:#FFFFFF; --flare-soft:rgba(194,80,26,.09);
+    --scan:#11807A; --danger:#C3304A; --warn:#946400;
+    --star-yellow:#E0A800; --star-red:#DD4528; --star-green:#2F9F45; --star-blue:#2F70D8; --star-purple:#8A56E0;
+    --shadow:0 12px 32px rgba(40,30,80,.16); --scrim:rgba(26,24,52,.42);
+  }
+}
+:root[data-theme="light"]{
+  color-scheme: light;
+  --void:#F3F1F9; --hull:#FFFFFF; --hull-2:#ECE9F5; --line:#D3CEE5; --line-soft:#E3DFEE;
+  --text:#1A1834; --muted:#5D5880; --faint:#8984A6;
+  --flare:#C2501A; --flare-ink:#FFFFFF; --flare-soft:rgba(194,80,26,.09);
+  --scan:#11807A; --danger:#C3304A; --warn:#946400;
+  --star-yellow:#E0A800; --star-red:#DD4528; --star-green:#2F9F45; --star-blue:#2F70D8; --star-purple:#8A56E0;
+  --shadow:0 12px 32px rgba(40,30,80,.16); --scrim:rgba(26,24,52,.42);
+}
+
+*,*::before,*::after{ box-sizing:border-box }
+[hidden]{ display:none !important }
+html{ -webkit-text-size-adjust:100% }
+html.sheet-open{ overflow:hidden }
+@media (display-mode: standalone){ html{ overscroll-behavior-y:none } }
+@media (display-mode: standalone) and (prefers-color-scheme: light){ html.ios body::before{ background:#100E22 } }
+body{ margin:0; background:var(--void); color:var(--text); font-family:var(--f-body); font-size:16px; line-height:1.5; -webkit-tap-highlight-color:transparent }
+body::before{ content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:40; background:var(--void) }
+button{ font:inherit; color:inherit }
+button:disabled{ cursor:default }
+:focus-visible{ outline:2px solid var(--flare); outline-offset:2px }
+.wrap{ width:100%; max-width:640px; margin-inline:auto; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)) }
+.vh{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap }
+.ic{ width:22px; height:22px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round }
+.ic .f{ fill:currentColor; stroke:none }
+
+/* Top bar */
+.topbar{ position:sticky; top:env(safe-area-inset-top,0px); z-index:20; background:var(--void); border-bottom:1px solid var(--line-soft) }
+.topbar-inner{ display:flex; align-items:center; gap:6px; min-height:56px }
+.top-title{ flex:1; min-width:0; margin:0; font-family:var(--f-display); font-weight:600; font-size:20px; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.icon-btn{ width:44px; height:44px; flex:none; display:grid; place-items:center; border:0; border-radius:12px; background:transparent; color:var(--text); cursor:pointer }
+.icon-btn:hover{ background:var(--hull) }
+#btn-back{ margin-left:-10px }
+.top-btn{ display:inline-flex; align-items:center; gap:6px; min-height:38px; padding:0 14px 0 10px; border-radius:10px; border:1px solid var(--line); background:var(--hull); color:var(--text); font-weight:700; font-size:15px; cursor:pointer }
+.top-btn .ic{ width:18px; height:18px }
+.ro-pill{ flex:none; font-family:var(--f-display); font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:2px 10px }
+
+/* View */
+#view{ padding-block:16px calc(var(--tabbar-h) + 96px + env(safe-area-inset-bottom,0px)); overflow-x:hidden; overflow-x:clip }
+#view-head:not(:empty){ margin-bottom:16px }
+#view-body{ display:grid; gap:22px; min-width:0 }
+.stack{ display:grid; gap:10px; min-width:0 }
+.section{ display:grid; gap:10px; min-width:0 }
+.section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:32px }
+.section-head h3, .set h3{ margin:0; font-family:var(--f-display); font-size:13px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--muted) }
+.count{ color:var(--faint); font-family:var(--f-mono); font-size:12px; letter-spacing:0; font-variant-numeric:tabular-nums; margin-left:4px }
+.link-btn{ display:inline-flex; align-items:center; gap:4px; background:none; border:0; padding:6px 2px; color:var(--flare); font-weight:700; font-size:15px; cursor:pointer }
+.link-btn .ic{ width:18px; height:18px; stroke-width:2.2 }
+.muted-note{ margin:0; color:var(--muted); font-size:15px }
+.meta{ margin:0; color:var(--faint); font-size:13px }
+
+/* Search */
+.search{ position:relative }
+.search .ic{ position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--faint); width:20px; height:20px; pointer-events:none }
+.search .input{ padding-left:42px }
+
+/* Lists */
+.list{ background:var(--hull); border:1px solid var(--line-soft); border-radius:var(--r-l); overflow:hidden; min-width:0 }
+.row{ display:flex; align-items:center; gap:12px; width:100%; min-height:62px; padding:10px 12px 10px 14px; border:0; background:none; text-align:left; cursor:pointer }
+.row + .row{ border-top:1px solid var(--line-soft) }
+.row:hover{ background:var(--hull-2) }
+.row-main{ flex:1; min-width:0; display:grid }
+.row-title{ font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.row-sub{ color:var(--muted); font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.row-end{ flex:none; display:flex; align-items:center; gap:6px }
+.ic.ic-fav{ width:16px; height:16px; color:var(--flare); fill:currentColor }
+.ic.ic-chev{ width:18px; height:18px; color:var(--faint) }
+.list-bar{ display:flex; align-items:center; justify-content:space-between; gap:12px }
+.list-bar .count{ font-size:13px; margin:0 }
+.seg{ display:inline-flex; padding:3px; border-radius:10px; background:var(--hull); border:1px solid var(--line-soft) }
+.seg-btn{ border:0; background:transparent; padding:4px 12px; border-radius:7px; font-size:14px; font-weight:700; color:var(--muted); cursor:pointer }
+.seg-btn[aria-pressed="true"]{ background:var(--hull-2); color:var(--text) }
+
+/* Bodies: stars, worlds, finds */
+.star-dot{ width:36px; height:36px; flex:none; border-radius:50%; background:radial-gradient(circle, #FFFFFF 0 12%, var(--star) 30%, color-mix(in srgb, var(--star) 30%, transparent) 52%, transparent 72%) }
+.disc{ width:30px; height:30px; margin:3px; flex:none; border-radius:50%; background:radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--biome) 50%, #FFFFFF) 0, var(--biome) 46%, color-mix(in srgb, var(--biome) 45%, #000000) 100%) }
+.disc.moon{ width:20px; height:20px; margin:8px }
+.kind-tile{ width:36px; height:36px; flex:none; display:grid; place-items:center; border-radius:10px; background:var(--hull-2); color:var(--scan) }
+.kind-tile .ic{ width:20px; height:20px }
+.badge{ display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:6px; border:1px solid var(--line); font-family:var(--f-mono); font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); white-space:nowrap }
+.badge-warn{ color:var(--warn); border-color:color-mix(in srgb, var(--warn) 45%, transparent) }
+.badge-cls{ color:var(--text) }
+.badge-cls.s{ color:var(--flare); border-color:color-mix(in srgb, var(--flare) 55%, transparent) }
+
+/* Log home */
+.totals{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px }
+.total{ display:grid; justify-items:start; gap:0; padding:10px 12px; border-radius:var(--r-m); border:1px solid var(--line-soft); background:var(--hull); text-align:left; cursor:pointer; min-width:0 }
+.total b{ font-family:var(--f-display); font-weight:600; font-size:26px; line-height:1.15; font-variant-numeric:tabular-nums }
+.total span{ font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100% }
+.banner{ display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:var(--r-l); background:var(--flare-soft); border:1px solid color-mix(in srgb, var(--flare) 28%, transparent) }
+.banner > div{ flex:1; min-width:0 }
+.banner p{ margin:2px 0 0; color:var(--muted); font-size:14px }
+.banner-warn{ background:color-mix(in srgb, var(--warn) 11%, transparent); border-color:color-mix(in srgb, var(--warn) 35%, transparent) }
+.banner.col{ flex-direction:column; align-items:stretch; gap:10px }
+.banner-actions{ display:flex; flex-wrap:wrap; gap:8px }
+.ic.inline-ic{ width:18px; height:18px; vertical-align:-4px }
+.loading{ display:flex; align-items:center; gap:12px; color:var(--muted); padding:24px 4px }
+.pulse{ width:12px; height:12px; border-radius:50%; background:var(--scan); animation:pulse 1.2s ease-in-out infinite }
+.empty{ display:grid; gap:10px; justify-items:start; padding:24px 20px; border:1px dashed var(--line); border-radius:var(--r-l) }
+.empty h3{ margin:0; font-family:var(--f-display); font-size:22px; font-weight:600; text-wrap:balance }
+.empty p{ margin:0; color:var(--muted); max-width:52ch }
+
+/* Detail hero */
+.hero{ position:relative; display:grid; gap:6px; padding-top:4px; min-height:100px; isolation:isolate }
+.hero > .eyebrow, .hero > h2, .hero > .hero-sub{ padding-right:108px }
+.eyebrow{ margin:0; font-family:var(--f-display); font-size:12px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--muted) }
+.hero h2{ margin:0; font-family:var(--f-display); font-weight:700; font-size:clamp(28px, 7.4vw, 40px); line-height:1.08; text-wrap:balance; overflow-wrap:anywhere }
+.hero-sub{ margin:0; color:var(--muted) }
+.orb{ position:absolute; top:-8px; right:-8px; width:118px; max-width:40%; aspect-ratio:1; border-radius:50%; z-index:-1; pointer-events:none;
+  background:radial-gradient(circle, #FFFFFF 0 7%, var(--star) 21%, color-mix(in srgb, var(--star) 38%, transparent) 40%, transparent 68%);
+  animation:flare-in .9s cubic-bezier(.2,.7,.2,1) both }
+.orb::after{ content:""; position:absolute; inset:-35%; border-radius:50%; background:radial-gradient(circle, color-mix(in srgb, var(--star) 16%, transparent), transparent 62%) }
+.orb.planet{ width:92px; top:4px; right:4px; background:radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--biome) 50%, #FFFFFF) 0, var(--biome) 46%, color-mix(in srgb, var(--biome) 42%, #000000) 100%); box-shadow:0 0 44px -10px var(--biome) }
+.orb.planet.moon{ width:62px; top:16px; right:18px }
+.orb.planet::after{ display:none }
+.hero .kind-tile.xl{ position:absolute; top:6px; right:4px; width:74px; height:74px; border-radius:22px }
+.kind-tile.xl .ic{ width:38px; height:38px; stroke-width:1.6 }
+.hero-actions{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:6px }
+.crumbs{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px }
+.crumb{ display:inline-flex; align-items:center; gap:8px; min-height:36px; max-width:100%; padding:0 10px 0 8px; border-radius:999px; border:1px solid var(--line); background:var(--hull); font-size:14px; font-weight:700; cursor:pointer }
+.crumb > span:not([class]){ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
+.crumb .star-dot{ width:20px; height:20px }
+.crumb .disc{ width:16px; height:16px; margin:2px }
+.crumb .ic{ width:16px; height:16px; color:var(--faint) }
+
+.stats{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; margin:0; background:var(--line-soft); border:1px solid var(--line-soft); border-radius:var(--r-l); overflow:hidden }
+.stats > div{ background:var(--hull); padding:10px 14px; min-width:0 }
+.stats > div:last-child:nth-child(odd){ grid-column:1 / -1 }
+.stats dt{ font-family:var(--f-display); font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted) }
+.stats dd{ margin:2px 0 0; font-weight:700; overflow-wrap:anywhere }
+.mono{ font-family:var(--f-mono); font-weight:600; letter-spacing:.03em }
+.notes{ margin:0; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px 14px; border-radius:var(--r-l); background:var(--hull); border:1px solid var(--line-soft); max-width:65ch }
+.tags{ display:flex; flex-wrap:wrap; gap:6px }
+.tag{ padding:4px 10px; border-radius:999px; background:var(--hull); border:1px solid var(--line-soft); font-size:14px }
+.fauna{ display:grid; gap:8px; padding:12px 14px; border-radius:var(--r-l); background:var(--hull); border:1px solid var(--line-soft) }
+.fauna-line{ display:flex; justify-content:space-between; gap:12px; font-size:15px }
+.fauna-line b{ font-family:var(--f-mono); font-variant-numeric:tabular-nums }
+.meter{ height:6px; border-radius:3px; background:var(--hull-2); overflow:hidden }
+.meter > i{ display:block; height:100%; border-radius:3px; background:var(--scan) }
+.coords{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:var(--r-l); background:var(--hull); border:1px solid var(--line-soft) }
+.coords .mono{ font-size:17px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; min-width:0 }
+
+/* Portal glyphs */
+.glyphs{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:3px }
+.glyph{ aspect-ratio:1; max-width:100%; display:grid; place-items:center; border-radius:6px; background:var(--hull); border:1px solid var(--line-soft); color:var(--text) }
+.glyph .ic{ width:74%; height:74%; stroke-width:1.6 }
+.glyph.empty{ background:transparent; border-style:dashed; border-color:var(--line) }
+.glyph-code{ display:flex; align-items:center; justify-content:space-between; gap:12px }
+.glyph-code .mono{ font-size:14px; letter-spacing:.16em; color:var(--muted); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; min-width:0 }
+.glyph-pad{ display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:6px }
+.gkey{ display:grid; justify-items:center; gap:1px; padding:6px 0 3px; border-radius:10px; border:1px solid var(--line); background:var(--hull); color:var(--text); cursor:pointer; min-width:0 }
+.gkey .ic{ width:24px; height:24px; stroke-width:1.6 }
+.gkey span{ font-family:var(--f-mono); font-size:10px; color:var(--faint) }
+.gkey:active{ background:var(--flare-soft); border-color:var(--flare) }
+
+/* Photos */
+.photos{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px }
+.photos.n1{ grid-template-columns:1fr }
+.photos.n2{ grid-template-columns:repeat(2,minmax(0,1fr)) }
+.photo{ display:block; padding:0; border:0; border-radius:10px; overflow:hidden; aspect-ratio:1; max-width:100%; background:var(--hull-2); cursor:zoom-in }
+.photos.n1 .photo{ aspect-ratio:16/9 }
+.photo img, .pthumb img{ display:block; width:100%; height:100%; object-fit:cover }
+.broken img{ visibility:hidden }
+.photo-edit{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px }
+.pthumb{ position:relative; aspect-ratio:1; max-width:100%; border-radius:10px; overflow:hidden; background:var(--hull-2) }
+.pthumb-x{ position:absolute; top:4px; right:4px; width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:50%; background:var(--scrim); color:var(--on-photo); cursor:pointer }
+.pthumb-x .ic{ width:16px; height:16px; stroke-width:2.4 }
+.pthumb.add{ display:grid; place-items:center; align-content:center; gap:2px; border:1px dashed var(--line); background:transparent; color:var(--muted); font-size:13px; cursor:pointer }
+.pthumb.pending{ display:grid; place-items:center; padding:4px; text-align:center; font-size:12px; color:var(--muted) }
+
+/* Buttons and chips */
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:0 16px; border-radius:var(--r-m); border:1px solid var(--line); background:var(--hull); color:var(--text); font-weight:700; font-size:15px; cursor:pointer; text-decoration:none }
+.btn .ic{ width:18px; height:18px; stroke-width:2.2 }
+.btn-sm{ min-height:36px; padding:0 14px; font-size:14px }
+.btn-primary{ background:var(--flare); color:var(--flare-ink); border-color:transparent }
+.btn-ghost{ background:transparent; border-color:transparent; color:var(--flare); padding:0 10px }
+.btn-danger{ background:transparent; color:var(--danger); border-color:color-mix(in srgb, var(--danger) 45%, transparent) }
+.btn-danger-solid{ background:var(--danger); color:var(--void); border-color:transparent }
+.btn:disabled{ opacity:.5 }
+.chips{ display:flex; flex-wrap:wrap; gap:8px }
+.chips.scroll{ flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; padding-bottom:2px }
+.chips.scroll::-webkit-scrollbar{ display:none }
+.chips.scroll .chip{ flex:none }
+.chip{ display:inline-flex; align-items:center; gap:7px; min-height:38px; padding:0 14px; border-radius:999px; border:1px solid var(--line); background:var(--hull); color:var(--text); font-size:15px; cursor:pointer; white-space:nowrap }
+.chip[aria-pressed="true"]{ background:var(--flare); border-color:var(--flare); color:var(--flare-ink); font-weight:700 }
+.chip .n{ font-family:var(--f-mono); font-size:12px; opacity:.75 }
+.chip .sw{ width:12px; height:12px; border-radius:50%; background:var(--sw); box-shadow:0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent) }
+.chip .ic{ width:16px; height:16px }
+.chip[aria-pressed="true"] .ic{ fill:currentColor }
+.chips.small .chip{ min-height:32px; padding:0 11px; font-size:14px }
+.chip-box{ max-height:224px; overflow-y:auto; padding:10px; border-radius:var(--r-m); border:1px solid var(--line-soft); background:var(--hull) }
+.chip-box .chip{ background:var(--hull-2); border-color:transparent }
+.chip-box .chip[aria-pressed="true"]{ background:var(--flare); border-color:var(--flare) }
+
+/* Bottom tabs and Add button */
+.tabbar{ position:fixed; left:0; right:0; bottom:0; z-index:20; background:var(--hull); border-top:1px solid var(--line-soft); padding-bottom:env(safe-area-inset-bottom,0px) }
+.tabbar-inner{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); height:var(--tabbar-h) }
+.tab{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:0; background:transparent; color:var(--muted); font-family:var(--f-display); font-size:12px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; cursor:pointer }
+.tab[aria-current="page"]{ color:var(--flare) }
+.tab[aria-current="page"]::before{ content:""; position:absolute; top:-1px; left:28%; right:28%; height:2px; border-radius:0 0 2px 2px; background:var(--flare) }
+.fab{ position:fixed; z-index:21; right:max(max(16px, env(safe-area-inset-right,0px)), calc((100vw - 640px) / 2 + 16px)); bottom:calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom,0px));
+  display:inline-flex; align-items:center; gap:8px; height:56px; padding:0 22px 0 16px; border:0; border-radius:18px; background:var(--flare); color:var(--flare-ink); font-weight:700; font-size:16px; cursor:pointer; box-shadow:var(--shadow) }
+.fab .ic{ stroke-width:2.4 }
+
+/* Sheets and forms */
+.sheet{ position:fixed; inset:0; z-index:50; display:flex; align-items:flex-end; justify-content:center; background:var(--scrim); animation:fade .18s ease-out }
+.sheet-panel{ width:100%; max-width:640px; max-height:calc(100% - 20px - env(safe-area-inset-top,0px)); display:flex; flex-direction:column; background:var(--void); border:1px solid var(--line-soft); border-bottom:0; border-radius:var(--r-l) var(--r-l) 0 0; box-shadow:var(--shadow); outline:none; animation:rise .24s cubic-bezier(.2,.8,.2,1) }
+.sheet-panel.tall{ height:calc(100% - 20px - env(safe-area-inset-top,0px)) }
+.sheet-head{ display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:8px; padding-block:8px; padding-left:max(8px, env(safe-area-inset-left,0px)); padding-right:max(12px, env(safe-area-inset-right,0px)); border-bottom:1px solid var(--line-soft) }
+.sheet-head > :first-child{ justify-self:start }
+.sheet-head > :last-child{ justify-self:end }
+.sheet-head h2{ margin:0; font-family:var(--f-display); font-size:17px; font-weight:600; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:52vw }
+.sheet-body{ flex:1; overflow-y:auto; overscroll-behavior:contain; display:grid; gap:20px; align-content:start; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); padding-block:18px calc(28px + env(safe-area-inset-bottom,0px)) }
+.field{ display:grid; gap:7px; min-width:0; margin:0; border:0; padding:0 }
+.lbl{ font-family:var(--f-display); font-size:12px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--muted) }
+.req{ font-style:normal; font-family:var(--f-body); font-weight:400; letter-spacing:0; text-transform:none; color:var(--faint); margin-left:6px }
+.hint{ font-size:13px; color:var(--faint) }
+.input{ width:100%; min-width:0; padding:11px 12px; border-radius:var(--r-m); border:1px solid var(--line); background:var(--hull); color:var(--text); font-family:var(--f-body); font-size:16px }
+.input::placeholder{ color:var(--faint) }
+.input:focus{ outline:2px solid var(--flare); outline-offset:0; border-color:transparent }
+.input.mono{ font-family:var(--f-mono); letter-spacing:.06em }
+textarea.input{ min-height:96px; resize:vertical; line-height:1.45 }
+.row2{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px }
+@media (max-width:370px){ .row2{ grid-template-columns:1fr } }
+.add-row{ display:flex; gap:8px }
+.add-row .input{ flex:1 }
+.pair{ display:flex; align-items:center; gap:10px }
+.pair .input{ width:6.5em }
+.pair span{ color:var(--muted) }
+.form-error{ padding:10px 12px; border-radius:var(--r-m); background:color-mix(in srgb, var(--danger) 13%, transparent); color:var(--danger); font-weight:700 }
+.form-ok{ padding:10px 12px; border-radius:var(--r-m); background:color-mix(in srgb, var(--scan) 13%, transparent); color:var(--scan); font-weight:700 }
+.danger-zone{ padding-top:16px; border-top:1px solid var(--line-soft) }
+.confirm{ display:grid; gap:12px; padding:18px; border-radius:var(--r-l); border:1px solid color-mix(in srgb, var(--danger) 40%, transparent); background:color-mix(in srgb, var(--danger) 7%, transparent) }
+.confirm h3{ margin:0; font-family:var(--f-display); font-size:20px; font-weight:600; overflow-wrap:anywhere }
+.confirm p{ margin:0; color:var(--muted) }
+.confirm-actions{ display:flex; flex-wrap:wrap; gap:10px }
+.choices{ display:grid; gap:10px }
+.choice{ display:flex; align-items:center; gap:14px; width:100%; padding:14px; border-radius:var(--r-l); border:1px solid var(--line-soft); background:var(--hull); text-align:left; cursor:pointer }
+.choice:hover{ border-color:var(--line) }
+.choice:disabled{ opacity:.45 }
+.choice > span:last-child{ display:grid; min-width:0 }
+.choice b{ font-size:17px }
+.choice small{ color:var(--muted); font-size:14px }
+.set{ display:grid; gap:8px; justify-items:start; padding-bottom:18px; border-bottom:1px solid var(--line-soft) }
+.set:last-child{ border-bottom:0 }
+.set p{ margin:0; max-width:56ch }
+
+/* Overlays */
+.lightbox{ position:fixed; inset:0; z-index:60; display:grid; place-items:center; background:var(--lightbox); padding:max(16px, env(safe-area-inset-top,0px)) max(16px, env(safe-area-inset-right,0px)) max(16px, env(safe-area-inset-bottom,0px)) max(16px, env(safe-area-inset-left,0px)) }
+.lightbox img{ max-width:100%; max-height:100%; border-radius:8px; object-fit:contain }
+.lb-close{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 12px); right:calc(env(safe-area-inset-right,0px) + 12px); color:var(--on-photo); background:var(--scrim) }
+.toast{ position:fixed; z-index:70; left:16px; right:16px; margin-inline:auto; width:fit-content; bottom:calc(var(--tabbar-h) + 88px + env(safe-area-inset-bottom,0px)); padding:10px 16px; border-radius:12px; background:var(--text); color:var(--void); font-weight:700; font-size:15px; text-align:center; box-shadow:var(--shadow); opacity:0; visibility:hidden; transform:translateY(8px); transition:opacity .18s, transform .18s, visibility .18s }
+.toast.show{ opacity:1; visibility:visible; transform:none }
+
+@keyframes flare-in{ from{ transform:scale(.7); opacity:.45 } }
+@keyframes pulse{ 50%{ opacity:.25; transform:scale(.7) } }
+@keyframes rise{ from{ transform:translateY(24px); opacity:.6 } }
+@keyframes fade{ from{ opacity:0 } }
+@media (prefers-reduced-motion: reduce){ *,*::before,*::after{ animation:none !important; transition:none !important } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <button class="icon-btn" id="btn-back" data-act="back" aria-label="Back" data-icon="back" hidden></button>
+    <h1 class="top-title" id="top-title">Traveller's Log</h1>
+    <span class="ro-pill" id="ro-pill" hidden>View only</span>
+    <span id="top-action"></span>
+  </div>
+</header>
+
+<main class="wrap" id="view">
+  <div id="view-head"></div>
+  <div id="view-body"><div class="loading" role="status"><span class="pulse"></span>Opening your log…</div></div>
+</main>
+
+<nav class="tabbar" aria-label="Sections">
+  <div class="wrap tabbar-inner">
+    <button class="tab" data-act="tab" data-tab="log" data-icon="log" aria-current="page"><span>Log</span></button>
+    <button class="tab" data-act="tab" data-tab="systems" data-icon="system"><span>Systems</span></button>
+    <button class="tab" data-act="tab" data-tab="planets" data-icon="planet"><span>Planets</span></button>
+    <button class="tab" data-act="tab" data-tab="finds" data-icon="scan"><span>Finds</span></button>
+  </div>
+</nav>
+
+<button class="fab" id="fab" data-act="add" data-icon="plus" hidden><span>Add</span></button>
+<div class="sheet" id="sheet" hidden></div>
+<div class="lightbox" id="lightbox" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- Game reference data ---------- */
+const GLYPHS = [['0','Sunset'],['1','Bird'],['2','Face'],['3','Diplo'],['4','Eclipse'],['5','Balloon'],['6','Boat'],['7','Bug'],['8','Dragonfly'],['9','Galaxy'],['A','Voxel'],['B','Fish'],['C','Tent'],['D','Rocket'],['E','Tree'],['F','Atlas']];
+const GLYPH_NAME = Object.fromEntries(GLYPHS);
+const GLYPH_PATHS = {
+  '0':'<path d="M3 17h18M6.5 17a5.5 5.5 0 0 1 11 0M12 6.5v2.2M6.4 9.4l1.5 1.5M17.6 9.4l-1.5 1.5M3.6 13.6h2M18.4 13.6h2"/>',
+  '1':'<path d="M2.5 10.5c2.8-2.4 6-2 9.5 2.6 3.5-4.6 6.7-5 9.5-2.6M12 13.1l-1.2 3.4h2.4z"/>',
+  '2':'<circle cx="12" cy="12" r="8.2"/><circle class="f" cx="9" cy="10.3" r="1.1"/><circle class="f" cx="15" cy="10.3" r="1.1"/><path d="M8.6 14.4c1.9 1.9 4.9 1.9 6.8 0"/>',
+  '3':'<path d="M2.5 18.5c1-3.6 3.6-5.6 7.5-5.6h3.6c1.9 0 3-1.1 3-3.2V7.2c0-1.3.9-2.2 2.1-2.2h2.3M6.5 14.2v4.8M13 13v6"/>',
+  '4':'<circle cx="12" cy="12" r="8"/><path class="f" d="M12 4a8 8 0 0 1 0 16a5.6 8 0 0 0 0-16z"/>',
+  '5':'<path d="M12 15.2c-3.4 0-6-3-6-6.4a6 6 0 0 1 12 0c0 3.4-2.6 6.4-6 6.4zM10.8 15.2l1.2 1.6 1.2-1.6M12 16.8v4.7"/>',
+  '6':'<path d="M3 14.5h18l-2.8 4.5H5.8zM12 3.5v11M12 4.5l6 8h-6"/>',
+  '7':'<ellipse cx="12" cy="13.2" rx="3.8" ry="5.6"/><path d="M12 7.6V5.8M9.8 4.2L12 5.8l2.2-1.6M8.2 10.8L4.2 8.6M8.2 13.6H3.6M8.6 16.6l-3.8 2.6M15.8 10.8l4-2.2M15.8 13.6h4.6M15.4 16.6l3.8 2.6"/>',
+  '8':'<path d="M12 4.5v16"/><ellipse cx="7.4" cy="8.4" rx="4.4" ry="1.9"/><ellipse cx="16.6" cy="8.4" rx="4.4" ry="1.9"/><ellipse cx="8" cy="12.4" rx="3.8" ry="1.6"/><ellipse cx="16" cy="12.4" rx="3.8" ry="1.6"/>',
+  '9':'<path d="M12 12c0-.9.9-1.5 1.7-1.1 1.3.6 1.1 2.6-.3 3.2-2 .9-4-.7-4-2.8 0-2.9 3.1-4.6 5.6-3.6 3.3 1.3 4 5.7 1.6 8.2-2.9 3.1-8.3 2.4-10.1-1.5"/>',
+  'A':'<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5L12 12l8-4.5M12 12v9"/>',
+  'B':'<path d="M2.8 12c3.2-4.6 9-5 13 0-4 5-9.8 4.6-13 0zM15.8 12l5.4-3.6v7.2z"/><circle class="f" cx="7" cy="11.3" r="1"/>',
+  'C':'<path d="M12 3.5L2.8 20h18.4zM9.4 20l2.6-5.4 2.6 5.4"/>',
+  'D':'<path d="M12 2.8c2.9 2.4 4 5.9 4 10.2l-1.4 3h-5.2L8 13c0-4.3 1.1-7.8 4-10.2zM8 13l-2.8 2.8.5 3.2 3-2M16 13l2.8 2.8-.5 3.2-3-2M10.6 19l1.4 2.6 1.4-2.6"/><circle cx="12" cy="9.4" r="1.6"/>',
+  'E':'<path d="M12 3l5 7h-2.8l3.8 5H6l3.8-5H7zM12 15v6"/>',
+  'F':'<path d="M12 2.5l7.5 9.5-7.5 9.5L4.5 12z"/><path class="f" d="M12 7.6l3.5 4.4-3.5 4.4L8.5 12z"/>',
+};
+const STAR_COLORS = ['Yellow','Red','Green','Blue','Purple'];
+const LIFEFORMS = ['Gek','Korvax',"Vy'keen",'Autophage','None'];
+const ECONOMIES = ['','Trading','Mining','Manufacturing','Technology','Scientific','Power Generation','Advanced Materials','Black Market','None'];
+const WEALTH = [['','Not recorded'],['1','★ Low'],['2','★★ Medium'],['3','★★★ High'],['pirate','Pirate controlled'],['none','No economy (abandoned)']];
+const CONFLICT = [['','Not recorded'],['1','★ Low'],['2','★★ Medium'],['3','★★★ High']];
+const GALAXIES = ['Euclid','Hilbert Dimension','Calypso','Hesperius Dimension','Hyades','Ickjamatew','Budullangr','Kikolgallr','Eltiensleem','Eissentam'];
+const BIOMES = { Lush:'#5CC46A', Barren:'#C9A26B', Dead:'#8D8A9E', Exotic:'#E36BD3', Frozen:'#9FD8F0', Irradiated:'#B9E04A', Scorched:'#F07A3A', Toxic:'#D8C83A', Marsh:'#6F9E7A', Volcanic:'#E0503A', Waterworld:'#3E8FE0', 'Gas Giant':'#D9B07A', Other:'#A29DC0' };
+const PLANET_TYPES = ['Paradise Planet','Temperate Planet','Tropical Planet','Lush Planet','Frozen Planet','Icy Planet','Toxic Planet','Caustic World','Radioactive Planet','Scorched Planet','Desert Planet','Dead Planet','Airless Planet','Bubbling Planet','Glassy Planet','Gas Giant'];
+const WEATHER = ['Clear skies','Mild rain','Humid','Heavy rain','Freezing','Blizzards','Scorching','Firestorms','Toxic rain','Radioactive storms','Dust storms','Superheated storms','No atmosphere'];
+const SENTINELS = ['None','Low','Average','Aggressive','Frenzied','Corrupted'];
+const LIFE_LEVELS = ['','None','Sparse','Average','Rich'];
+const RESOURCES = ['Carbon','Ferrite Dust','Pure Ferrite','Magnetised Ferrite','Oxygen','Sodium','Di-hydrogen','Cobalt','Chlorine','Salt','Copper','Cadmium','Emeril','Indium','Activated Copper','Activated Cadmium','Activated Emeril','Activated Indium','Paraffinium','Pyrite','Ammonia','Uranium','Dioxite','Phosphorus','Silver','Gold','Platinum','Star Bulb','Gamma Root','Cactus Flesh','Frost Crystal','Fungal Mould','Solanium','Mordite','Rusted Metal','Ancient Bones','Storm Crystals','Salvageable Scrap','Kelp Sac','Cyto-Phosphate','Marrow Bulb','Sac Venom'];
+const FIND_KINDS = [['creature','Creature'],['plant','Plant'],['mineral','Mineral'],['ship','Starship'],['tool','Multi-tool'],['base','Base'],['poi','Point of interest'],['other','Other']];
+const KIND_LABEL = Object.fromEntries(FIND_KINDS);
+const SUBTYPES = {
+  creature:['Herbivore','Carnivore','Predator','Flying','Underwater','Underground','Exotic'],
+  ship:['Fighter','Hauler','Explorer','Shuttle','Exotic','Solar','Living Ship','Sentinel Interceptor','Corvette'],
+  tool:['Pistol','Rifle','Experimental','Alien','Royal','Atlantid','Sentinel','Staff'],
+  base:['Home base','Outpost','Farm','Freighter base'],
+  poi:['Ancient ruin','Crashed freighter','Crashed starship','Abandoned building','Portal','Monolith','Trading post','Settlement','Derelict freighter','Distress signal'],
+};
+const MAX_PHOTOS = 8;
+const COLL = { system:'systems', planet:'planets', find:'finds' };
+
+/* ---------- Icons ---------- */
+const I = {
+  back:'<path d="M15 5l-7 7 7 7"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  sliders:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  star:'<path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/>',
+  trash:'<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
+  camera:'<path d="M4 8h3.2l1.8-2.6h6L16.8 8H20v11H4z"/><circle cx="12" cy="13.3" r="3.4"/>',
+  close:'<path d="M6 6l12 12M18 6L6 18"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  backspace:'<path d="M9 5.5h11v13H9l-6-6.5zM12.2 9.2l5 5.6M17.2 9.2l-5 5.6"/>',
+  chevron:'<path d="M9 5l7 7-7 7"/>',
+  log:'<path d="M6 3.5h11.5v17H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5zM8.5 8h6M8.5 11.5h6M8.5 15h3.5"/>',
+  system:'<circle cx="12" cy="12" r="3.6"/><path d="M12 2.5v3.2M12 18.3v3.2M2.5 12h3.2M18.3 12h3.2M5.3 5.3l2.2 2.2M16.5 16.5l2.2 2.2M5.3 18.7l2.2-2.2M16.5 7.5l2.2-2.2"/>',
+  planet:'<circle cx="12" cy="12" r="5.6"/><path d="M6.7 14.2C3.2 16.3 2 18.1 3 19c1.6 1.4 7.4-.8 12.6-4.9S22.4 6.2 21 4.9c-.9-.9-2.9 0-5.4 1.8"/>',
+  scan:'<circle cx="12" cy="12" r="2"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4"/>',
+  creature:'<circle cx="12" cy="15.2" r="3.6"/><circle cx="6.6" cy="10.4" r="1.8"/><circle cx="10" cy="6.6" r="1.8"/><circle cx="14" cy="6.6" r="1.8"/><circle cx="17.4" cy="10.4" r="1.8"/>',
+  plant:'<path d="M5 19C5 10.5 10 5 19 5c0 9-5 14-14 14zM5 19l8.5-8.5"/>',
+  mineral:'<path d="M12 3l5.5 6.5L12 21 6.5 9.5zM6.5 9.5h11M12 3v18"/>',
+  ship:'<path d="M12 3l2.6 7.6 6.4 3.2v2.1l-6.2-1.1-1 4.2h-3.6l-1-4.2L3 16v-2.1l6.4-3.2z"/>',
+  tool:'<path d="M3 8.5h13l2-2h3v5h-5l-2 2v5.5H10l1-5.5H3z"/>',
+  base:'<path d="M4 11l8-6.2 8 6.2v9H4zM10 20v-5.2h4V20"/>',
+  poi:'<path d="M12 21s-6.5-5.6-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.3"/>',
+  other:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4.6M12 16h.01"/>',
+  share:'<path d="M12 14.5V3.5M8 7.2l4-3.7 4 3.7M7.5 10H5.5v10.5h13V10h-2"/>',
+};
+const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || ''}</svg>`;
+const glyphSvg = h => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${GLYPH_PATHS[h] || ''}</svg>`;
+
+/* ---------- State ---------- */
+const S = {
+  db: null, assets: null,
+  status: 'connecting',         // connecting | ready | unsupported
+  canWrite: true,
+  systems: new Map(), planets: new Map(), finds: new Map(),
+  loaded: { systems: false, planets: false, finds: false },
+  tab: 'log', stack: [], scrolls: [],
+  filters: { log: '', systems: '', planets: '', finds: '', findKind: 'all', sort: { systems: 'recent', planets: 'recent', finds: 'recent' } },
+  settings: { restore: null, busy: '', confirmExamples: false, msg: '', backup: null, usage: '' },
+  installHidden: false,
+};
+
+/* ---------- Helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const val = v => v == null ? '' : String(v);
+const norm = s => String(s || '').trim().toLowerCase();
+const plural = (n, w, ws) => `${n} ${n === 1 ? w : (ws || w + 's')}`;
+const all = c => [...S[c].values()];
+const byName = (a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true });
+const byRecent = (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '');
+const byBody = (a, b) => ((a.body === 'Moon') - (b.body === 'Moon')) || byName(a, b);
+const sortBy = (arr, how) => arr.sort(how === 'az' ? byName : byRecent);
+const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); };
+const validAssetId = id => typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id);
+// Screenshots live in IndexedDB; each one gets a blob: URL the first time it's shown
+const photoUrls = new Map(), photoLoads = new Map();
+const photoUrl = id => photoUrls.get(id) || '';
+const imgTag = id => { const u = photoUrl(id); return `<img data-photo data-pid="${esc(id)}"${u ? ` src="${esc(u)}"` : ''} alt="" loading="lazy">`; };
+const labelOf = (pairs, v) => { const p = pairs.find(x => x[0] === v); return p && v ? p[1] : ''; };
+const starVar = c => STAR_COLORS.includes(c) ? `var(--star-${c.toLowerCase()})` : 'var(--faint)';
+const biomeColor = b => BIOMES[b] || BIOMES.Other;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const hay = (...xs) => xs.flat().filter(Boolean).join(' ').toLowerCase();
+const sysHay = s => hay(s.name, s.galaxy, s.region, s.starColor, s.starClass, s.lifeform, s.economy, s.notes, s.glyphs);
+const plHay = p => hay(p.name, p.body, p.biome, p.description, p.weather, p.sentinels, p.resources, p.notes);
+const fdHay = f => hay(f.name, KIND_LABEL[f.kind], f.subtype, f.cls ? f.cls + '-class' : '', f.coords, f.notes);
+const exampleCount = () => ['systems', 'planets', 'finds'].reduce((n, c) => n + all(c).filter(x => x.example).length, 0);
+
+function indexes() {
+  const pBySys = new Map(), fBySys = new Map(), fByPl = new Map();
+  const push = (m, k, v) => { if (!k) return; let a = m.get(k); if (!a) m.set(k, a = []); a.push(v); };
+  for (const p of S.planets.values()) push(pBySys, p.systemId, p);
+  for (const f of S.finds.values()) { push(fBySys, f.systemId, f); push(fByPl, f.planetId, f); }
+  return { ps: id => pBySys.get(id) || [], fs: id => fBySys.get(id) || [], fp: id => fByPl.get(id) || [] };
+}
+
+async function withRetry(fn) {
+  try { return await fn(); }
+  catch (e) {
+    if (e && e.code === 'unavailable') { await sleep(300 + Math.random() * 700); return fn(); }
+    throw e;
+  }
+}
+function explain(e) {
+  if (e && e.name === 'QuotaExceededError') return 'Your phone has no space left for this app. Delete some screenshots or entries, then try again.';
+  return "Couldn't save that on this device. Try again.";
+}
+
+/* ---------- Elements ---------- */
+const viewHead = $('#view-head'), viewBody = $('#view-body');
+const fab = $('#fab'), sheet = $('#sheet'), lightbox = $('#lightbox'), toastEl = $('#toast');
+const tabs = [...document.querySelectorAll('.tab')];
+let toastT = 0;
+function toast(msg) {
+  toastEl.textContent = msg; toastEl.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 2800);
+}
+
+/* ---------- Routing ---------- */
+const current = () => S.stack.length ? S.stack[S.stack.length - 1] : { type: 'tab' };
+function go(type, id) { S.scrolls[S.stack.length] = window.scrollY; S.stack.push({ type, id }); render(); window.scrollTo(0, 0); }
+function back() { S.stack.pop(); render(); window.scrollTo(0, S.scrolls[S.stack.length] || 0); }
+function goTab(t) {
+  if (S.tab === t && !S.stack.length) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  S.tab = t; S.stack = []; render(); window.scrollTo(0, 0);
+}
+
+/* ---------- Render ---------- */
+let lastKey = '', renderQueued = false;
+function scheduleRender() { if (renderQueued) return; renderQueued = true; setTimeout(() => { renderQueued = false; render(); }, 0); }
+
+function render() {
+  const route = current(), X = indexes();
+  renderTop(route);
+  const v = viewFor(route, X);
+  if (v.key !== lastKey) { viewHead.innerHTML = v.head; lastKey = v.key; }
+  viewBody.innerHTML = v.body;
+  hydratePhotos(viewBody);
+  tabs.forEach(b => b.setAttribute('aria-current', b.dataset.tab === S.tab ? 'page' : 'false'));
+  fab.hidden = !(S.status === 'ready' && S.canWrite);
+  $('#ro-pill').hidden = !(S.status === 'ready' && !S.canWrite);
+}
+
+function renderTop(route) {
+  const TITLES = { log: "Traveller's Log", systems: 'Star systems', planets: 'Planets & moons', finds: 'Finds' };
+  let title = TITLES[S.tab], action = '';
+  if (route.type === 'system') title = 'Star system';
+  if (route.type === 'planet') title = (S.planets.get(route.id) || {}).body === 'Moon' ? 'Moon' : 'Planet';
+  if (route.type === 'find') title = KIND_LABEL[(S.finds.get(route.id) || {}).kind] || 'Find';
+  if (route.type === 'tab' && S.tab === 'log') {
+    action = `<button class="icon-btn" data-act="settings" aria-label="Log settings">${icon('sliders')}</button>`;
+  } else if (route.type !== 'tab' && S.canWrite && S[COLL[route.type]].has(route.id)) {
+    action = `<button class="top-btn" data-act="edit" data-type="${route.type}" data-id="${esc(route.id)}">${icon('edit')}Edit</button>`;
+  }
+  $('#top-title').textContent = title;
+  $('#btn-back').hidden = route.type === 'tab';
+  const slot = $('#top-action');
+  if (slot.innerHTML !== action) slot.innerHTML = action;
+}
+
+function viewFor(route, X) {
+  if (route.type === 'system') return { key: 's:' + route.id, head: '', body: viewSystem(route.id, X) };
+  if (route.type === 'planet') return { key: 'p:' + route.id, head: '', body: viewPlanet(route.id, X) };
+  if (route.type === 'find') return { key: 'f:' + route.id, head: '', body: viewFind(route.id) };
+  if (S.tab === 'systems') return { key: 'tab:systems', head: searchBox('systems', 'Filter by name, galaxy, region, glyphs'), body: viewSystems(X) };
+  if (S.tab === 'planets') return { key: 'tab:planets', head: searchBox('planets', 'Filter by name, biome, resource'), body: viewPlanets() };
+  if (S.tab === 'finds') return { key: 'tab:finds', head: searchBox('finds', 'Filter by name, type, notes'), body: viewFinds() };
+  return { key: 'tab:log', head: searchBox('log', 'Search your whole log'), body: viewLog(X) };
+}
+
+/* ---------- Building blocks ---------- */
+function searchBox(k, ph) {
+  return `<div class="search">${icon('search')}<input class="input" type="search" id="q-${k}" data-filter="${k}" value="${esc(S.filters[k])}" placeholder="${esc(ph)}" aria-label="${esc(ph)}" autocomplete="off" enterkeyhint="search"></div>`;
+}
+function gate() {
+  if (S.status === 'unsupported') return `<div class="banner banner-warn" role="status"><div><b>This browser can't save your log.</b><p>Open the app in Safari or Chrome, and not in a private window.</p></div></div>`;
+  if (S.status === 'connecting') return `<div class="loading" role="status"><span class="pulse"></span>Opening your log…</div>`;
+  return '';
+}
+const section = (title, action, content) => `<section class="section"><div class="section-head"><h3>${title}</h3>${action || ''}</div>${content}</section>`;
+const listOf = rows => `<div class="list">${rows.join('')}</div>`;
+const newBtn = (kind, label, ctx = {}) => `<button class="btn btn-primary" data-act="new" data-kind="${kind}" data-system="${esc(ctx.system || '')}" data-planet="${esc(ctx.planet || '')}">${icon('plus')}${esc(label)}</button>`;
+const newLink = (kind, label, ctx = {}) => `<button class="link-btn" data-act="new" data-kind="${kind}" data-system="${esc(ctx.system || '')}" data-planet="${esc(ctx.planet || '')}">${icon('plus')}${esc(label)}</button>`;
+const emptyState = (title, text, action) => `<div class="empty"><h3>${esc(title)}</h3><p>${esc(text)}</p>${action || ''}</div>`;
+const noMatch = q => `<p class="muted-note">Nothing matches “${esc(q)}”.</p>`;
+const starDot = (color, extra = '') => `<span class="star-dot${extra}" style="--star:${starVar(color)}" aria-hidden="true"></span>`;
+const planetDisc = p => `<span class="disc${p.body === 'Moon' ? ' moon' : ''}" style="--biome:${biomeColor(p.biome)}" aria-hidden="true"></span>`;
+const kindTile = (kind, extra = '') => `<span class="kind-tile${extra}" aria-hidden="true">${icon(KIND_LABEL[kind] ? kind : 'other')}</span>`;
+
+function rowEnd(item, extra = '') {
+  return `<span class="row-end">${extra}${item.favorite ? icon('star', 'ic-fav') : ''}${icon('chevron', 'ic-chev')}</span>`;
+}
+function systemRow(s, X) {
+  const np = X.ps(s.id).length, nf = X.fs(s.id).length;
+  const sub = [s.galaxy, s.lifeform && s.lifeform !== 'None' ? s.lifeform : '', plural(np, 'planet'), nf ? plural(nf, 'find') : ''].filter(Boolean).join(' · ');
+  return `<button class="row" data-act="open" data-type="system" data-id="${esc(s.id)}">${starDot(s.starColor)}<span class="row-main"><span class="row-title">${esc(s.name || 'Unnamed system')}</span><span class="row-sub">${esc(sub)}</span></span>${rowEnd(s)}</button>`;
+}
+function planetRow(p, showSystem = true) {
+  const sys = S.systems.get(p.systemId);
+  const sub = [p.body === 'Moon' ? 'Moon' : 'Planet', p.biome, showSystem ? (sys ? sys.name : 'Unknown system') : p.description].filter(Boolean).join(' · ');
+  const hostile = ['Aggressive', 'Frenzied', 'Corrupted'].includes(p.sentinels) ? `<span class="badge badge-warn">${esc(p.sentinels)}</span>` : '';
+  return `<button class="row" data-act="open" data-type="planet" data-id="${esc(p.id)}">${planetDisc(p)}<span class="row-main"><span class="row-title">${esc(p.name || 'Unnamed')}</span><span class="row-sub">${esc(sub)}</span></span>${rowEnd(p, hostile)}</button>`;
+}
+function findWhere(f) {
+  const p = f.planetId && S.planets.get(f.planetId), s = S.systems.get(f.systemId);
+  if (p) return p.name;
+  if (s) return `${s.name}, in space`;
+  return 'Unknown location';
+}
+function findRow(f, showWhere = true) {
+  const kl = KIND_LABEL[f.kind] || 'Find';
+  const sub = [kl, f.subtype && f.subtype !== kl ? f.subtype : '', showWhere ? findWhere(f) : ''].filter(Boolean).join(' · ');
+  const cls = f.cls ? `<span class="badge badge-cls${f.cls === 'S' ? ' s' : ''}">${esc(f.cls)}</span>` : '';
+  return `<button class="row" data-act="open" data-type="find" data-id="${esc(f.id)}">${kindTile(f.kind)}<span class="row-main"><span class="row-title">${esc(f.name || 'Unnamed find')}</span><span class="row-sub">${esc(sub)}</span></span>${rowEnd(f, cls)}</button>`;
+}
+const rowFor = (t, v, X) => t === 'system' ? systemRow(v, X) : t === 'planet' ? planetRow(v) : findRow(v);
+
+function glyphStrip(code) {
+  const chars = String(code || '').toUpperCase().split('');
+  let cells = '';
+  for (let i = 0; i < 12; i++) {
+    const c = chars[i];
+    cells += c && GLYPH_PATHS[c] ? `<span class="glyph" title="${GLYPH_NAME[c]}">${glyphSvg(c)}</span>` : '<span class="glyph empty"></span>';
+  }
+  const names = chars.map(c => GLYPH_NAME[c]).filter(Boolean).join(', ');
+  return `<div class="glyphs" role="img" aria-label="${esc(names ? 'Portal glyphs: ' + names : 'No glyphs entered')}">${cells}</div>`;
+}
+// P SSS YY ZZZ XXX: planet, system, then the Y, Z and X coordinates
+const groupGlyphs = c => c.length === 12 ? `${c[0]} ${c.slice(1, 4)} ${c.slice(4, 6)} ${c.slice(6, 9)} ${c.slice(9)}` : c;
+
+function statsBlock(pairs) {
+  const items = pairs.filter(p => p[1] !== '' && p[1] != null);
+  if (!items.length) return '';
+  return `<dl class="stats">${items.map(([k, v, cls]) => `<div><dt>${esc(k)}</dt><dd${cls ? ` class="${cls}"` : ''}>${esc(v)}</dd></div>`).join('')}</dl>`;
+}
+const notesBlock = n => n ? section('Notes', '', `<p class="notes">${esc(n)}</p>`) : '';
+function photosBlock(ids) {
+  ids = (ids || []).filter(validAssetId);
+  if (!ids.length) return '';
+  return section(`Screenshots<span class="count">${ids.length}</span>`, '', `<div class="photos n${Math.min(ids.length, 3)}">${ids.map(id => `<button class="photo" data-act="photo" data-pid="${esc(id)}" aria-label="View screenshot full size">${imgTag(id)}</button>`).join('')}</div>`);
+}
+function heroActions(type, item) {
+  const fav = S.canWrite ? `<button class="chip" data-act="fav" data-type="${type}" data-id="${esc(item.id)}" aria-pressed="${!!item.favorite}">${icon('star')}${item.favorite ? 'Starred' : 'Star'}</button>` : (item.favorite ? `<span class="badge">Starred</span>` : '');
+  const ex = item.example ? '<span class="badge">Example</span>' : '';
+  return fav || ex ? `<div class="hero-actions">${fav}${ex}</div>` : '';
+}
+function metaLine(item) {
+  const c = fmtDate(item.createdAt), u = fmtDate(item.updatedAt);
+  return c ? `<p class="meta">Logged ${esc(c)}${u && u !== c ? ` · edited ${esc(u)}` : ''}</p>` : '';
+}
+function missing() {
+  return gate() || `<div class="empty"><h3>This entry is gone</h3><p>It was deleted, maybe in another window.</p><button class="btn" data-act="back">Go back</button></div>`;
+}
+
+/* ---------- Views ---------- */
+function viewLog(X) {
+  const g = gate(); if (g) return g;
+  const out = [installBanner()];
+  const ex = exampleCount();
+  if (ex && S.canWrite) out.push(`<div class="banner"><div><b>These are example entries.</b><p>They show how a logged system looks. Remove them when you start your own log.</p></div><button class="btn btn-sm" data-act="remove-examples">Remove</button></div>`);
+  const q = norm(S.filters.log);
+  if (q) return out.join('') + searchResults(q, X);
+  const total = S.systems.size + S.planets.size + S.finds.size;
+  if (!total) {
+    out.push(emptyState('Your log is empty', 'Warp somewhere new, then log the system: its star, economy and portal glyphs. Planets and finds go inside it.', S.canWrite ? newBtn('system', 'Log a star system') : ''));
+    return out.join('');
+  }
+  out.push(`<div class="totals">${[['systems', S.systems.size, 'Systems'], ['planets', S.planets.size, 'Planets'], ['finds', S.finds.size, 'Finds']].map(([t, n, l]) => `<button class="total" data-act="tab" data-tab="${t}"><b>${n}</b><span>${l}</span></button>`).join('')}</div>`);
+  const tagged = [...all('systems').map(v => ['system', v]), ...all('planets').map(v => ['planet', v]), ...all('finds').map(v => ['find', v])];
+  const favs = tagged.filter(([, v]) => v.favorite);
+  if (favs.length) out.push(section(`Starred<span class="count">${favs.length}</span>`, '', listOf(favs.map(([t, v]) => rowFor(t, v, X)))));
+  const recent = tagged.sort((a, b) => byRecent(a[1], b[1])).slice(0, 12);
+  out.push(section('Recently logged', '', listOf(recent.map(([t, v]) => rowFor(t, v, X)))));
+  return out.join('');
+}
+
+function searchResults(q, X) {
+  const ss = all('systems').filter(s => sysHay(s).includes(q)).sort(byName);
+  const ps = all('planets').filter(p => plHay(p).includes(q)).sort(byName);
+  const fs = all('finds').filter(f => fdHay(f).includes(q)).sort(byName);
+  if (!ss.length && !ps.length && !fs.length) return noMatch(S.filters.log.trim());
+  return [
+    ss.length ? section(`Systems<span class="count">${ss.length}</span>`, '', listOf(ss.map(s => systemRow(s, X)))) : '',
+    ps.length ? section(`Planets & moons<span class="count">${ps.length}</span>`, '', listOf(ps.map(p => planetRow(p)))) : '',
+    fs.length ? section(`Finds<span class="count">${fs.length}</span>`, '', listOf(fs.map(f => findRow(f)))) : '',
+  ].join('');
+}
+
+function sortBar(list, n, noun, nouns) {
+  const cur = S.filters.sort[list];
+  return `<div class="list-bar"><span class="count">${plural(n, noun, nouns)}</span><div class="seg" role="group" aria-label="Sort order">${[['recent', 'Recent'], ['az', 'A–Z']].map(([v, l]) => `<button class="seg-btn" data-act="sort" data-list="${list}" data-sort="${v}" aria-pressed="${cur === v}">${l}</button>`).join('')}</div></div>`;
+}
+
+function viewSystems(X) {
+  const g = gate(); if (g) return g;
+  if (!S.systems.size) return emptyState('No star systems yet', 'Log the system you are in right now: its star colour, economy and portal glyphs.', S.canWrite ? newBtn('system', 'Log a star system') : '');
+  const q = norm(S.filters.systems);
+  const items = sortBy(all('systems').filter(s => !q || sysHay(s).includes(q)), S.filters.sort.systems);
+  return `<div class="stack">${sortBar('systems', items.length, 'system')}${items.length ? listOf(items.map(s => systemRow(s, X))) : noMatch(S.filters.systems.trim())}</div>`;
+}
+
+function viewPlanets() {
+  const g = gate(); if (g) return g;
+  if (!S.planets.size) return emptyState('No planets yet', 'Land somewhere and log its biome, weather, sentinels and resources.', S.canWrite ? (S.systems.size ? newBtn('planet', 'Log a planet') : newBtn('system', 'Log a star system first')) : '');
+  const q = norm(S.filters.planets);
+  const items = sortBy(all('planets').filter(p => !q || plHay(p).includes(q)), S.filters.sort.planets);
+  return `<div class="stack">${sortBar('planets', items.length, 'world')}${items.length ? listOf(items.map(p => planetRow(p))) : noMatch(S.filters.planets.trim())}</div>`;
+}
+
+function viewFinds() {
+  const g = gate(); if (g) return g;
+  if (!S.finds.size) return emptyState('No finds yet', 'Log creatures, plants, starships, multi-tools, bases and anything else worth coming back for.', S.canWrite ? (S.systems.size ? newBtn('find', 'Log a find') : newBtn('system', 'Log a star system first')) : '');
+  const counts = {};
+  for (const f of S.finds.values()) counts[f.kind] = (counts[f.kind] || 0) + 1;
+  if (S.filters.findKind !== 'all' && !counts[S.filters.findKind]) S.filters.findKind = 'all';
+  const kind = S.filters.findKind, q = norm(S.filters.finds);
+  const chips = `<div class="chips scroll" role="group" aria-label="Show only one kind"><button class="chip" data-act="kind" data-kind="all" aria-pressed="${kind === 'all'}">All <span class="n">${S.finds.size}</span></button>${FIND_KINDS.filter(([k]) => counts[k]).map(([k, l]) => `<button class="chip" data-act="kind" data-kind="${k}" aria-pressed="${kind === k}">${l} <span class="n">${counts[k]}</span></button>`).join('')}</div>`;
+  const items = sortBy(all('finds').filter(f => (kind === 'all' || f.kind === kind) && (!q || fdHay(f).includes(q))), S.filters.sort.finds);
+  return chips + `<div class="stack">${sortBar('finds', items.length, 'find')}${items.length ? listOf(items.map(f => findRow(f))) : noMatch(S.filters.finds.trim() || KIND_LABEL[kind])}</div>`;
+}
+
+function viewSystem(id, X) {
+  const s = S.systems.get(id); if (!s) return missing();
+  const planets = X.ps(id).slice().sort(byBody);
+  const finds = X.fs(id).slice().sort(byRecent);
+  return [
+    `<section class="hero" style="--star:${starVar(s.starColor)}"><div class="orb" aria-hidden="true"></div>
+      <p class="eyebrow">${esc([s.starColor ? s.starColor + ' star' : 'Star system', s.galaxy].filter(Boolean).join(' · '))}</p>
+      <h2>${esc(s.name || 'Unnamed system')}</h2>
+      ${s.region ? `<p class="hero-sub">${esc(s.region)}</p>` : ''}
+      ${heroActions('system', s)}</section>`,
+    s.glyphs ? section('Portal address', '', `<div class="stack">${glyphStrip(s.glyphs)}<div class="glyph-code"><span class="mono">${esc(groupGlyphs(s.glyphs))}</span><button class="link-btn" data-act="copy" data-text="${esc(s.glyphs)}">Copy code</button></div></div>`) : '',
+    statsBlock([['Spectral class', s.starClass, 'mono'], ['Lifeform', s.lifeform], ['Economy', s.economy], ['Wealth', labelOf(WEALTH, s.wealth)], ['Conflict', labelOf(CONFLICT, s.conflict)]]),
+    notesBlock(s.notes),
+    photosBlock(s.photos),
+    section(`Planets & moons<span class="count">${planets.length}</span>`, S.canWrite ? newLink('planet', 'Add', { system: id }) : '', planets.length ? listOf(planets.map(p => planetRow(p, false))) : '<p class="muted-note">No planets logged in this system yet.</p>'),
+    section(`Finds<span class="count">${finds.length}</span>`, S.canWrite ? newLink('find', 'Add', { system: id }) : '', finds.length ? listOf(finds.map(f => findRow(f))) : '<p class="muted-note">No finds logged in this system yet.</p>'),
+    metaLine(s),
+  ].join('');
+}
+
+function viewPlanet(id, X) {
+  const p = S.planets.get(id); if (!p) return missing();
+  const sys = S.systems.get(p.systemId);
+  const finds = X.fp(id).slice().sort(byRecent);
+  const ft = Number(p.faunaTotal) || 0, ff = Math.min(Number(p.faunaFound) || 0, ft || Infinity);
+  return [
+    `<section class="hero" style="--biome:${biomeColor(p.biome)}"><div class="orb planet${p.body === 'Moon' ? ' moon' : ''}" aria-hidden="true"></div>
+      <p class="eyebrow">${esc([p.body || 'Planet', p.biome].filter(Boolean).join(' · '))}</p>
+      <h2>${esc(p.name || 'Unnamed')}</h2>
+      <div class="crumbs">${sys ? `<button class="crumb" data-act="open" data-type="system" data-id="${esc(sys.id)}">${starDot(sys.starColor)}<span>${esc(sys.name)}</span>${icon('chevron')}</button>` : '<span class="badge">Unknown system</span>'}</div>
+      ${heroActions('planet', p)}</section>`,
+    statsBlock([['In-game type', p.description], ['Weather', p.weather], ['Sentinels', p.sentinels], ['Flora', p.flora], ['Fauna', p.fauna]]),
+    ft ? section('Fauna discovered', '', `<div class="fauna"><div class="fauna-line"><span>${ff === ft ? 'All creatures found' : 'Creatures found'}</span><b>${ff} / ${ft}</b></div><div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="${ft}" aria-valuenow="${ff}"><i style="width:${Math.round(ff / ft * 100)}%"></i></div></div>`) : '',
+    (p.resources || []).length ? section(`Resources<span class="count">${p.resources.length}</span>`, '', `<div class="tags">${p.resources.map(r => `<span class="tag">${esc(r)}</span>`).join('')}</div>`) : '',
+    notesBlock(p.notes),
+    photosBlock(p.photos),
+    section(`Finds<span class="count">${finds.length}</span>`, S.canWrite ? newLink('find', 'Add', { system: p.systemId, planet: id }) : '', finds.length ? listOf(finds.map(f => findRow(f, false))) : `<p class="muted-note">Nothing logged on this ${p.body === 'Moon' ? 'moon' : 'planet'} yet.</p>`),
+    metaLine(p),
+  ].join('');
+}
+
+function viewFind(id) {
+  const f = S.finds.get(id); if (!f) return missing();
+  const sys = S.systems.get(f.systemId), pl = f.planetId && S.planets.get(f.planetId);
+  const kl = KIND_LABEL[f.kind] || 'Find';
+  return [
+    `<section class="hero">${kindTile(f.kind, ' xl')}
+      <p class="eyebrow">${esc([kl, f.subtype && f.subtype !== kl ? f.subtype : ''].filter(Boolean).join(' · '))}</p>
+      <h2>${esc(f.name || 'Unnamed find')}</h2>
+      <div class="crumbs">
+        ${pl ? `<button class="crumb" data-act="open" data-type="planet" data-id="${esc(pl.id)}">${planetDisc(pl)}<span>${esc(pl.name)}</span>${icon('chevron')}</button>` : ''}
+        ${sys ? `<button class="crumb" data-act="open" data-type="system" data-id="${esc(sys.id)}">${starDot(sys.starColor)}<span>${esc(sys.name)}${pl ? '' : ', in space'}</span>${icon('chevron')}</button>` : '<span class="badge">Unknown system</span>'}
+      </div>
+      ${heroActions('find', f)}</section>`,
+    statsBlock([['Class', f.cls ? f.cls + '-class' : ''], ['Type', f.subtype]]),
+    f.coords ? section('Planetary coordinates', '', `<div class="coords"><span class="mono">${esc(f.coords)}</span><button class="link-btn" data-act="copy" data-text="${esc(f.coords)}">Copy</button></div>`) : '',
+    notesBlock(f.notes),
+    photosBlock(f.photos),
+    metaLine(f),
+  ].join('');
+}
+
+/* ---------- Sheets ---------- */
+let sheetState = null;
+function openSheet(opts) {
+  if (sheetState) closeSheet();
+  sheetState = opts;
+  sheet.innerHTML = `<div class="sheet-panel${opts.tall ? ' tall' : ''}" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">
+    <div class="sheet-head"><button type="button" class="btn btn-ghost" data-sheet="cancel">${esc(opts.cancelLabel || 'Cancel')}</button><h2 id="sheet-title">${esc(opts.title)}</h2>${opts.onSave ? `<button type="button" class="btn btn-primary btn-sm" data-sheet="save">Save</button>` : '<span></span>'}</div>
+    <div class="sheet-body" id="sheet-body"></div></div>`;
+  sheet.hidden = false;
+  document.documentElement.classList.add('sheet-open');
+  refreshSheet();
+  sheet.querySelector('.sheet-panel').focus({ preventScroll: true });
+}
+function refreshSheet() {
+  if (!sheetState) return;
+  $('#sheet-body').innerHTML = sheetState.render();
+  hydratePhotos($('#sheet-body'));
+  const save = sheet.querySelector('[data-sheet="save"]'), f = sheetState.form;
+  if (save && f) { save.disabled = !!(f.confirmDelete || f.saving); save.textContent = f.saving ? 'Saving…' : 'Save'; }
+}
+function closeSheet() {
+  sheetState = null; sheet.hidden = true; sheet.innerHTML = '';
+  document.documentElement.classList.remove('sheet-open');
+}
+function cancelSheet() { const s = sheetState; if (s && s.onCancel) s.onCancel(); closeSheet(); }
+
+/* ---------- Forms ---------- */
+const SPECS = {
+  system: { coll: 'systems', noun: 'star system', fields: [
+    { k: 'name', t: 'text', label: 'System name', required: true, placeholder: 'As shown in the Discoveries menu' },
+    { k: 'starColor', t: 'chips', label: 'Star colour', options: STAR_COLORS, swatch: starVar },
+    { row: [ { k: 'galaxy', t: 'text', label: 'Galaxy', list: GALAXIES }, { k: 'starClass', t: 'text', label: 'Spectral class', mono: true, placeholder: 'G2pf' } ] },
+    { k: 'region', t: 'text', label: 'Region', placeholder: 'e.g. Loychazinq Spur' },
+    { k: 'lifeform', t: 'chips', label: 'Dominant lifeform', options: LIFEFORMS },
+    { row: [ { k: 'economy', t: 'select', label: 'Economy', options: ECONOMIES }, { k: 'conflict', t: 'select', label: 'Conflict', options: CONFLICT } ] },
+    { k: 'wealth', t: 'select', label: 'Wealth', options: WEALTH },
+    { k: 'glyphs', t: 'glyphs', label: 'Portal address' },
+    { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Station traders, pirates, anything worth remembering' },
+    { k: 'photos', t: 'photos', label: 'Screenshots' },
+  ] },
+  planet: { coll: 'planets', noun: 'planet', fields: [
+    { k: 'systemId', t: 'system', label: 'Star system', required: true },
+    { k: 'name', t: 'text', label: 'Name', required: true, placeholder: 'As shown in the Discoveries menu' },
+    { k: 'body', t: 'chips', label: 'Body', options: ['Planet', 'Moon'], noClear: true },
+    { k: 'biome', t: 'chips', label: 'Biome', options: Object.keys(BIOMES), swatch: biomeColor },
+    { row: [ { k: 'description', t: 'text', label: 'In-game type', list: PLANET_TYPES, placeholder: 'Paradise Planet' }, { k: 'weather', t: 'text', label: 'Weather', list: WEATHER } ] },
+    { k: 'sentinels', t: 'chips', label: 'Sentinels', options: SENTINELS },
+    { row: [ { k: 'flora', t: 'select', label: 'Flora', options: LIFE_LEVELS }, { k: 'fauna', t: 'select', label: 'Fauna', options: LIFE_LEVELS } ] },
+    { k: 'faunaFound', k2: 'faunaTotal', t: 'pair', label: 'Fauna discovered', hint: 'From the Discoveries menu, for example 5 of 8.' },
+    { k: 'resources', t: 'multi', label: 'Resources', options: RESOURCES },
+    { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Storms, good base spots, where the deposits are' },
+    { k: 'photos', t: 'photos', label: 'Screenshots' },
+  ] },
+  find: { coll: 'finds', noun: 'find', fields: [
+    { k: 'kind', t: 'chips', label: 'What is it?', options: FIND_KINDS, noClear: true },
+    { k: 'name', t: 'text', label: 'Name', required: true },
+    { k: 'systemId', t: 'system', label: 'Star system', required: true },
+    { k: 'planetId', t: 'planet', label: 'Planet or moon' },
+    { k: 'cls', t: 'chips', label: 'Class', options: ['S', 'A', 'B', 'C'], showIf: d => d.kind === 'ship' || d.kind === 'tool' },
+    { k: 'subtype', t: 'text', label: 'Type', listFn: d => SUBTYPES[d.kind] || [], showIf: d => !!SUBTYPES[d.kind] },
+    { k: 'coords', t: 'text', label: 'Planetary coordinates', mono: true, placeholder: '+12.40, -56.81', showIf: d => !!d.planetId },
+    { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Price, behaviour, what it drops, how to get there' },
+    { k: 'photos', t: 'photos', label: 'Screenshots' },
+  ] },
+};
+const flatFields = spec => spec.fields.flatMap(f => f.row || [f]);
+const optPairs = opts => opts.map(o => Array.isArray(o) ? o : [o, o || 'Not recorded']);
+const recentSystem = () => all('systems').sort(byRecent)[0];
+
+function blankDraft(kind, ctx) {
+  const rs = recentSystem();
+  let systemId = ctx.systemId || '';
+  if (!systemId && ctx.planetId) systemId = (S.planets.get(ctx.planetId) || {}).systemId || '';
+  if (!systemId && rs) systemId = rs.id;
+  if (kind === 'system') return { name: '', galaxy: rs ? rs.galaxy || 'Euclid' : 'Euclid', region: '', starColor: '', starClass: '', lifeform: '', economy: '', wealth: '', conflict: '', glyphs: '', notes: '', photos: [], favorite: false };
+  if (kind === 'planet') return { systemId, name: '', body: 'Planet', biome: '', description: '', weather: '', sentinels: '', flora: '', fauna: '', faunaFound: '', faunaTotal: '', resources: [], notes: '', photos: [], favorite: false };
+  return { kind: 'creature', name: '', systemId, planetId: ctx.planetId || '', cls: '', subtype: '', coords: '', notes: '', photos: [], favorite: false };
+}
+
+function openForm(kind, existing, ctx) {
+  const spec = SPECS[kind];
+  const draft = existing ? JSON.parse(JSON.stringify(existing)) : blankDraft(kind, ctx || {});
+  delete draft.id;
+  if (!Array.isArray(draft.photos)) draft.photos = [];
+  if (kind === 'planet' && !Array.isArray(draft.resources)) draft.resources = [];
+  const form = { kind, id: existing ? existing.id : null, draft, uploads: [], removed: [], uploading: 0, confirmDelete: false, error: '', saving: false };
+  openSheet({ title: `${existing ? 'Edit' : 'New'} ${spec.noun}`, tall: true, form, render: () => renderForm(form), onSave: () => submitForm(form), onCancel: () => discardUploads(form) });
+}
+function openNew(kind, ctx) {
+  if (!S.canWrite || S.status !== 'ready') return;
+  if (kind !== 'system' && !S.systems.size) kind = 'system';
+  openForm(kind, null, ctx);
+}
+function openEdit(type, id) {
+  const item = S[COLL[type]].get(id);
+  if (item && S.canWrite) openForm(type, item);
+}
+
+function renderForm(form) {
+  if (form.confirmDelete) return renderDeleteConfirm(form);
+  const spec = SPECS[form.kind];
+  const err = form.error ? `<div class="form-error" role="alert">${esc(form.error)}</div>` : '';
+  const del = form.id ? `<div class="danger-zone"><button type="button" class="btn btn-danger" data-sheet-act="ask-delete">${icon('trash')}Delete this ${spec.noun}</button></div>` : '';
+  return err + spec.fields.map(f => renderField(f, form)).join('') + del;
+}
+
+function renderField(f, form) {
+  const d = form.draft;
+  if (f.row) { const inner = f.row.filter(x => !x.showIf || x.showIf(d)).map(x => renderField(x, form)).join(''); return inner ? `<div class="row2">${inner}</div>` : ''; }
+  if (f.showIf && !f.showIf(d)) return '';
+  const id = 'f-' + f.k;
+  const lbl = (forId) => `<span class="lbl"${forId ? ` id="${forId}"` : ''}>${esc(f.label)}${f.required ? '<i class="req">required</i>' : ''}</span>`;
+  const hint = f.hint ? `<span class="hint">${esc(f.hint)}</span>` : '';
+  switch (f.t) {
+    case 'text': {
+      const list = f.list || (f.listFn ? f.listFn(d) : null);
+      const lid = list && list.length ? `dl-${f.k}-${d.kind || 'x'}` : '';
+      return `<label class="field" for="${id}">${lbl()}<input class="input${f.mono ? ' mono' : ''}" id="${id}" data-k="${f.k}" value="${esc(val(d[f.k]))}" placeholder="${esc(f.placeholder || '')}"${lid ? ` list="${lid}"` : ''} autocomplete="off" ${f.mono ? 'spellcheck="false" autocapitalize="off"' : 'autocapitalize="words"'}>${lid ? `<datalist id="${lid}">${list.map(o => `<option value="${esc(o)}"></option>`).join('')}</datalist>` : ''}${hint}</label>`;
+    }
+    case 'textarea':
+      return `<label class="field" for="${id}">${lbl()}<textarea class="input" id="${id}" data-k="${f.k}" rows="4" placeholder="${esc(f.placeholder || '')}" autocapitalize="sentences">${esc(val(d[f.k]))}</textarea>${hint}</label>`;
+    case 'select':
+      return `<label class="field" for="${id}">${lbl()}<select class="input" id="${id}" data-k="${f.k}">${optPairs(f.options).map(([v, l]) => `<option value="${esc(v)}"${val(d[f.k]) === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${hint}</label>`;
+    case 'chips':
+      return `<div class="field" role="group" aria-labelledby="${id}-l">${lbl(id + '-l')}<div class="chips">${optPairs(f.options).map(([v, l]) => `<button type="button" class="chip" data-chip="${f.k}" data-v="${esc(v)}" aria-pressed="${d[f.k] === v}">${f.swatch ? `<span class="sw" style="--sw:${f.swatch(v)}"></span>` : ''}${esc(l)}</button>`).join('')}</div>${hint}</div>`;
+    case 'multi': {
+      const sel = new Set(d[f.k] || []);
+      const opts = [...new Set([...(d[f.k] || []).filter(x => !f.options.includes(x)), ...f.options])];
+      return `<div class="field" role="group" aria-labelledby="${id}-l"><span class="lbl" id="${id}-l">${esc(f.label)}${sel.size ? ` · ${sel.size} picked` : ''}</span><div class="chip-box"><div class="chips small">${opts.map(o => `<button type="button" class="chip" data-multi="${f.k}" data-v="${esc(o)}" aria-pressed="${sel.has(o)}">${esc(o)}</button>`).join('')}</div></div><div class="add-row"><input class="input" id="${id}-add" placeholder="Add one that isn't listed" aria-label="Add a resource that isn't listed" autocomplete="off" enterkeyhint="done"><button type="button" class="btn" data-multi-add="${f.k}">Add</button></div></div>`;
+    }
+    case 'pair':
+      return `<div class="field" role="group" aria-labelledby="${id}-l">${lbl(id + '-l')}<div class="pair"><input class="input" type="number" inputmode="numeric" min="0" id="${id}" data-k="${f.k}" value="${esc(val(d[f.k]))}" aria-label="Creatures discovered"><span>of</span><input class="input" type="number" inputmode="numeric" min="0" id="f-${f.k2}" data-k="${f.k2}" value="${esc(val(d[f.k2]))}" aria-label="Creatures on this world"></div>${hint}</div>`;
+    case 'system': {
+      const systems = all('systems').sort(byName);
+      return `<label class="field" for="${id}">${lbl()}<select class="input" id="${id}" data-k="${f.k}" data-rerender="1">${S.systems.has(d[f.k]) ? '' : '<option value="">Choose a system</option>'}${systems.map(s => `<option value="${esc(s.id)}"${s.id === d[f.k] ? ' selected' : ''}>${esc(s.name || 'Unnamed system')}</option>`).join('')}</select></label>`;
+    }
+    case 'planet': {
+      const planets = d.systemId ? all('planets').filter(p => p.systemId === d.systemId).sort(byBody) : [];
+      return `<label class="field" for="${id}">${lbl()}<select class="input" id="${id}" data-k="${f.k}" data-rerender="1"><option value="">In space (station, orbit, freighter)</option>${planets.map(p => `<option value="${esc(p.id)}"${p.id === d[f.k] ? ' selected' : ''}>${esc(p.name)}${p.body === 'Moon' ? ' (moon)' : ''}</option>`).join('')}</select>${planets.length ? '' : '<span class="hint">No planets logged in this system yet.</span>'}</label>`;
+    }
+    case 'glyphs':
+      return `<div class="field" role="group" aria-labelledby="${id}-l">${lbl(id + '-l')}<div id="glyph-display">${glyphStrip(d.glyphs)}</div><div class="glyph-pad">${GLYPHS.map(([h, n]) => `<button type="button" class="gkey" data-glyph="${h}" aria-label="${n} glyph, ${h}">${glyphSvg(h)}<span>${h}</span></button>`).join('')}</div><div class="add-row"><input class="input mono" id="f-glyphs" maxlength="12" value="${esc(val(d.glyphs))}" placeholder="Or type the 12-digit code" aria-label="Portal code" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn" data-glyph="del" aria-label="Remove last glyph">${icon('backspace')}</button></div><span class="hint">Tap glyphs left to right. You'll find a planet's address in the Discoveries menu or in photo mode.</span></div>`;
+    case 'photos': {
+      if (!S.assets) return '';
+      const ids = d.photos || [];
+      const room = ids.length + form.uploading < MAX_PHOTOS;
+      return `<div class="field" role="group" aria-labelledby="${id}-l">${lbl(id + '-l')}<div class="photo-edit">${ids.map(pid => `<div class="pthumb">${imgTag(pid)}<button type="button" class="pthumb-x" data-photo-remove="${esc(pid)}" aria-label="Remove screenshot">${icon('close')}</button></div>`).join('')}${form.uploading ? '<div class="pthumb pending" role="status">Adding…</div>' : ''}${room ? `<label class="pthumb add">${icon('camera')}<span>Add</span><input type="file" accept="image/*" multiple id="f-photos-in" class="vh"></label>` : ''}</div><span class="hint">Up to ${MAX_PHOTOS}. Large screenshots are shrunk to save space on your phone.</span></div>`;
+    }
+  }
+  return '';
+}
+
+function updateGlyphField(form) {
+  const disp = $('#glyph-display'), inp = $('#f-glyphs');
+  if (disp) disp.innerHTML = glyphStrip(form.draft.glyphs);
+  if (inp && inp.value !== form.draft.glyphs) inp.value = form.draft.glyphs;
+}
+
+function deletionTargets(kind, id) {
+  const t = [];
+  const add = (coll, item) => t.push({ coll, id: item.id, photos: (item.photos || []).filter(validAssetId) });
+  if (kind === 'system') {
+    for (const p of all('planets')) if (p.systemId === id) add('planets', p);
+    for (const f of all('finds')) if (f.systemId === id) add('finds', f);
+  }
+  if (kind === 'planet') for (const f of all('finds')) if (f.planetId === id) add('finds', f);
+  const self = S[COLL[kind]].get(id);
+  if (self) add(COLL[kind], self);
+  return t;
+}
+function renderDeleteConfirm(form) {
+  const t = deletionTargets(form.kind, form.id);
+  const np = t.filter(x => x.coll === 'planets' && x.id !== form.id).length;
+  const nf = t.filter(x => x.coll === 'finds' && x.id !== form.id).length;
+  const shots = t.reduce((n, x) => n + x.photos.length, 0);
+  const extra = [np ? plural(np, 'planet') : '', nf ? plural(nf, 'find') : ''].filter(Boolean).join(' and ');
+  const name = form.draft.name || 'this entry';
+  return `<div class="confirm" role="alertdialog" aria-labelledby="cf-h"><h3 id="cf-h">Delete “${esc(name)}”?</h3><p>${extra ? `This also deletes the ${extra} logged ${form.kind === 'system' ? 'in this system' : 'on it'}. ` : ''}${shots ? `${plural(shots, 'screenshot')} will be deleted too. ` : ''}This can't be undone.</p><div class="confirm-actions"><button type="button" class="btn btn-danger-solid" data-sheet-act="do-delete"${form.saving ? ' disabled' : ''}>${form.saving ? 'Deleting…' : 'Delete'}</button><button type="button" class="btn" data-sheet-act="cancel-delete">Keep it</button></div></div>`;
+}
+
+function normalize(kind, d) {
+  const o = {};
+  for (const [k, v] of Object.entries(d)) o[k] = typeof v === 'string' ? v.trim() : v;
+  const toNum = v => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : null; };
+  if (kind === 'system') o.glyphs = String(o.glyphs || '').toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
+  if (kind === 'planet') { o.faunaFound = toNum(o.faunaFound); o.faunaTotal = toNum(o.faunaTotal); o.resources = (o.resources || []).filter(Boolean); }
+  if (kind === 'find') { if (o.kind !== 'ship' && o.kind !== 'tool') o.cls = ''; if (!o.planetId) o.coords = ''; }
+  o.photos = (o.photos || []).filter(validAssetId);
+  o.favorite = !!o.favorite;
+  return o;
+}
+
+async function submitForm(form) {
+  const spec = SPECS[form.kind], d = form.draft;
+  const fail = msg => { form.error = msg; refreshSheet(); const b = $('#sheet-body'); if (b) b.scrollTop = 0; };
+  if (form.uploading) return fail('Screenshots are still being added. Save again in a moment.');
+  if (!String(d.name || '').trim()) return fail(`Give the ${spec.noun} a name.`);
+  if (form.kind !== 'system' && !S.systems.has(d.systemId)) return fail('Pick the star system it belongs to.');
+  if (form.kind === 'find' && d.planetId && !S.planets.has(d.planetId)) d.planetId = '';
+  const body = normalize(form.kind, d);
+  const now = new Date().toISOString();
+  const prev = form.id ? S[spec.coll].get(form.id) : null;
+  body.createdAt = (prev && prev.createdAt) || now;
+  body.updatedAt = now;
+  form.saving = true; form.error = ''; refreshSheet();
+  try {
+    const ref = form.id ? S.db.collection(spec.coll).doc(form.id) : S.db.collection(spec.coll).doc();
+    await withRetry(() => ref.set(body));
+    S[spec.coll].set(ref.id, Object.assign({ id: ref.id }, body));
+    form.uploads = [];
+    for (const pid of form.removed) dropAsset(pid);
+    closeSheet();
+    toast(form.id ? 'Changes saved' : `${spec.noun[0].toUpperCase() + spec.noun.slice(1)} logged`);
+    if (!form.id) {
+      const r = current();
+      const parentHere = (form.kind === 'planet' && r.type === 'system' && r.id === body.systemId) ||
+        (form.kind === 'find' && ((r.type === 'planet' && r.id === body.planetId) || (r.type === 'system' && r.id === body.systemId)));
+      if (parentHere) render(); else go(form.kind, ref.id);
+    } else render();
+  } catch (e) {
+    form.saving = false; fail(explain(e));
+  }
+}
+
+async function performDelete(form) {
+  const targets = deletionTargets(form.kind, form.id);
+  form.saving = true; refreshSheet();
+  try {
+    for (const t of targets) {
+      await withRetry(() => S.db.collection(t.coll).doc(t.id).delete());
+      S[t.coll].delete(t.id);
+      t.photos.forEach(dropAsset);
+    }
+    discardUploads(form);
+    closeSheet();
+    const gone = new Set(targets.map(t => t.id));
+    S.stack = S.stack.filter(r => !gone.has(r.id));
+    render(); window.scrollTo(0, 0);
+    toast('Deleted');
+  } catch (e) {
+    form.saving = false; form.confirmDelete = false; form.error = explain(e); refreshSheet();
+  }
+}
+
+/* ---------- Screenshots ---------- */
+function dropAsset(id) {
+  const u = photoUrls.get(id); if (u) URL.revokeObjectURL(u);
+  photoUrls.delete(id);
+  store.del('photos', id).catch(() => {});
+}
+function loadPhoto(id) {
+  if (photoUrls.has(id)) return Promise.resolve(photoUrls.get(id));
+  if (!photoLoads.has(id)) {
+    photoLoads.set(id, store.get('photos', id).then(rec => rec && rec.blob ? rec.blob : null, () => null).then(blob => {
+      photoLoads.delete(id);
+      if (!blob) return '';
+      const u = URL.createObjectURL(blob); photoUrls.set(id, u); return u;
+    }));
+  }
+  return photoLoads.get(id);
+}
+// Fill in screenshots that weren't loaded yet when the HTML was built
+function hydratePhotos(root) {
+  if (!root) return;
+  root.querySelectorAll('img[data-pid]:not([src])').forEach(img => {
+    loadPhoto(img.dataset.pid).then(u => {
+      if (u) img.src = u;
+      else { const p = img.closest('.photo, .pthumb'); if (p) p.classList.add('broken'); }
+    });
+  });
+}
+function discardUploads(form) { form.uploads.forEach(dropAsset); form.uploads = []; }
+
+async function shrink(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const w = img.naturalWidth, h = img.naturalHeight, s = Math.min(1, 1800 / Math.max(w, h));
+    if (s === 1 && file.size < 1.5e6 && /^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * s); c.height = Math.round(h * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.86));
+    return out || file;
+  } catch (e) { return file; }
+  finally { URL.revokeObjectURL(url); }
+}
+
+async function addPhotos(form, files) {
+  const list = [...files].slice(0, Math.max(0, MAX_PHOTOS - form.draft.photos.length - form.uploading));
+  for (const file of list) {
+    form.uploading++; refreshSheet();
+    try {
+      const blob = await shrink(file);
+      const type = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(blob.type) ? blob.type : '';
+      if (!type) throw { code: 'unsupported_type' };
+      const id = newId();
+      await store.put('photos', id, { blob, type, createdAt: new Date().toISOString() });
+      photoUrls.set(id, URL.createObjectURL(blob));
+      form.draft.photos = [...form.draft.photos, id];
+      form.uploads.push(id);
+    } catch (e) {
+      const code = e && (e.code || e.name);
+      toast(code === 'unsupported_type' ? 'That image type isn’t supported. Use a PNG or JPEG.'
+        : code === 'QuotaExceededError' ? 'Your phone has no space left for screenshots.'
+        : 'Couldn’t add that screenshot. Try again.');
+    } finally {
+      form.uploading--;
+      if (sheetState && sheetState.form === form) refreshSheet();
+    }
+  }
+}
+
+/* ---------- Other actions ---------- */
+async function toggleFav(type, id) {
+  const coll = COLL[type], item = S[coll].get(id);
+  if (!item || !S.canWrite) return;
+  const next = !item.favorite;
+  S[coll].set(id, Object.assign({}, item, { favorite: next })); render();
+  try { await withRetry(() => S.db.collection(coll).doc(id).update({ favorite: next })); }
+  catch (e) { const cur = S[coll].get(id); if (cur) S[coll].set(id, Object.assign({}, cur, { favorite: !next })); render(); toast(explain(e)); }
+}
+
+function copyText(text) {
+  const fallback = () => toast(`Copy is blocked here. The code is ${text}`);
+  try { navigator.clipboard.writeText(text).then(() => toast('Copied ' + text), fallback); }
+  catch (e) { fallback(); }
+}
+
+function openLightbox(pid) {
+  loadPhoto(pid).then(src => {
+    if (!src) return;
+    lightbox.innerHTML = `<img src="${esc(src)}" alt="Screenshot"><button type="button" class="icon-btn lb-close" aria-label="Close">${icon('close')}</button>`;
+    lightbox.hidden = false;
+  });
+}
+function closeLightbox() { lightbox.hidden = true; lightbox.innerHTML = ''; }
+
+function openAdd() {
+  const r = current(); let systemId = '', planetId = '';
+  if (r.type === 'system') systemId = r.id;
+  if (r.type === 'planet') { planetId = r.id; systemId = (S.planets.get(r.id) || {}).systemId || ''; }
+  if (r.type === 'find') { const f = S.finds.get(r.id); if (f) { systemId = f.systemId; planetId = f.planetId || ''; } }
+  openSheet({ title: 'Log a discovery', cancelLabel: 'Close', scrimClose: true, ctx: { systemId, planetId }, render: () => {
+    const sys = S.systems.get(systemId), pl = S.planets.get(planetId), none = !S.systems.size;
+    return `<div class="choices">
+      <button type="button" class="choice" data-sheet-act="new-system">${starDot('Yellow')}<span><b>Star system</b><small>Just warped in? Start here.</small></span></button>
+      <button type="button" class="choice" data-sheet-act="new-planet"${none ? ' disabled' : ''}>${planetDisc({ biome: 'Lush' })}<span><b>Planet or moon</b><small>${sys ? 'In ' + esc(sys.name) : 'Biome, weather, sentinels, resources'}</small></span></button>
+      <button type="button" class="choice" data-sheet-act="new-find"${none ? ' disabled' : ''}>${kindTile('creature')}<span><b>Find</b><small>${pl ? 'On ' + esc(pl.name) : sys ? 'In ' + esc(sys.name) : 'Creature, plant, starship, multi-tool, base…'}</small></span></button>
+    </div>${none ? '<p class="muted-note">Planets and finds belong to a star system, so log a system first.</p>' : ''}`;
+  } });
+}
+
+/* ---------- Settings: backup, restore, examples, install ---------- */
+const freshSettings = (o = {}) => Object.assign({ restore: null, busy: '', confirmExamples: false, msg: '', backup: null, usage: '' }, o);
+function openSettings(opts = {}) {
+  S.settings = freshSettings({ confirmExamples: !!opts.examples });
+  openSheet({ title: 'Log settings', cancelLabel: 'Close', scrimClose: true, render: renderSettings });
+  storageUsage().then(u => { if (u && sheetState && sheetState.render === renderSettings) { S.settings.usage = u; refreshSheet(); } });
+}
+function renderSettings() {
+  const st = S.settings, ex = exampleCount(), out = [];
+  if (st.msg) out.push(`<div class="form-ok" role="status">${esc(st.msg)}</div>`);
+  if (ex && S.canWrite) {
+    const n = `${ex} example ${ex === 1 ? 'entry' : 'entries'}`;
+    out.push(`<section class="set"><h3>Example entries</h3>${st.confirmExamples
+      ? `<p>Remove the ${n}? Anything you logged yourself stays.</p><div class="confirm-actions"><button type="button" class="btn btn-danger-solid" data-sheet-act="examples-go"${st.busy ? ' disabled' : ''}>${st.busy === 'examples' ? 'Removing…' : 'Remove examples'}</button><button type="button" class="btn" data-sheet-act="examples-cancel">Keep them</button></div>`
+      : `<p>${n} came with this log to show how it works.</p><button type="button" class="btn" data-sheet-act="examples-ask">Remove examples</button>`}</section>`);
+  }
+  if (S.status === 'ready') {
+    const b = st.backup;
+    out.push(`<section class="set"><h3>Back up</h3><p>Your log is saved only on this device. Make a backup file now and then, screenshots included, so you can get everything back if you lose or reset your phone.</p>${b
+      ? `<p class="hint">Backup ready: ${plural(b.entries, 'entry', 'entries')} and ${plural(b.photos, 'screenshot')}, ${fmtSize(b.blob.size)}.</p><div class="confirm-actions"><button type="button" class="btn btn-primary" data-sheet-act="backup-save">${icon('share')}Save backup file</button><button type="button" class="btn" data-sheet-act="backup-cancel">Cancel</button></div>`
+      : `<button type="button" class="btn" data-sheet-act="export"${st.busy ? ' disabled' : ''}>${st.busy === 'export' ? 'Making backup…' : 'Make backup file'}</button>`}</section>`);
+    const r = st.restore;
+    out.push(`<section class="set"><h3>Restore</h3>${r
+      ? `<p>This file has ${plural(r.systems.length, 'system')}, ${plural(r.planets.length, 'planet')}, ${plural(r.finds.length, 'find')} and ${plural(r.photoCount, 'screenshot')}. Entries already in your log with the same ID are replaced. Nothing gets deleted.</p><div class="confirm-actions"><button type="button" class="btn btn-primary" data-sheet-act="restore-go"${st.busy ? ' disabled' : ''}>${st.busy === 'restore' ? 'Restoring…' : 'Restore'}</button><button type="button" class="btn" data-sheet-act="restore-cancel">Cancel</button></div>`
+      : `<p>Load a backup file you saved earlier. Backups from the claude.ai version of this log work too, without their screenshots.</p><label class="btn">Choose backup file<input type="file" id="restore-in" class="vh"></label>`}</section>`);
+  }
+  if (!isStandalone()) out.push(`<section class="set"><h3>Install as an app</h3><p>${installText()}</p>${installEvt ? `<button type="button" class="btn btn-primary" data-sheet-act="install">Install</button>` : ''}</section>`);
+  out.push(`<section class="set"><h3>Where your log lives</h3><p>On this device only. Nothing is uploaded anywhere. Deleting the app or clearing this site's data in your browser can erase it, so keep a backup.</p>${st.usage ? `<p class="hint">${esc(st.usage)}</p>` : ''}</section>`);
+  return out.join('');
+}
+
+const fmtSize = n => n < 1e6 ? `${Math.max(1, Math.round(n / 1e3))} KB` : `${(n / 1e6).toFixed(n < 1e7 ? 1 : 0)} MB`;
+async function storageUsage() {
+  try { const e = await navigator.storage.estimate(); return e && e.usage != null ? `Using about ${fmtSize(e.usage)} on this device.` : ''; }
+  catch (e) { return ''; }
+}
+const blobToDataUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
+
+// Step 1: build the file. Step 2 (saveBackup) hands it over on a fresh tap,
+// because phones only open the share sheet straight after a tap.
+async function makeBackup() {
+  if (S.settings.busy) return;
+  S.settings.busy = 'export'; S.settings.msg = ''; refreshSheet();
+  try {
+    const colls = { systems: all('systems'), planets: all('planets'), finds: all('finds') };
+    const ids = new Set();
+    for (const c in colls) for (const x of colls[c]) for (const id of (x.photos || [])) if (validAssetId(id)) ids.add(id);
+    const head = JSON.stringify(Object.assign({ app: 'travellers-log', version: 2, exportedAt: new Date().toISOString() }, colls));
+    const parts = [head.slice(0, -1), ',"photos":{'];
+    let n = 0;
+    for (const id of ids) {
+      const rec = await store.get('photos', id);
+      if (!rec || !rec.blob) continue;
+      parts.push(new Blob([(n ? ',' : '') + JSON.stringify(id) + ':' + JSON.stringify(await blobToDataUrl(rec.blob))]));
+      n++;
+    }
+    parts.push('}}');
+    S.settings.backup = { blob: new Blob(parts, { type: 'application/json' }), entries: colls.systems.length + colls.planets.length + colls.finds.length, photos: n, name: `travellers-log-${new Date().toISOString().slice(0, 10)}.json` };
+  } catch (e) {
+    toast('Couldn’t make the backup file. Try again.');
+  }
+  S.settings.busy = ''; refreshSheet();
+}
+
+async function saveBackup() {
+  const b = S.settings.backup; if (!b) return;
+  const file = new File([b.blob], b.name, { type: 'application/json' });
+  if (matchMedia('(pointer: coarse)').matches && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      S.settings.backup = null; S.settings.msg = 'Done. Keep the backup file somewhere safe, like Files or a cloud drive.'; refreshSheet();
+      return;
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(b.blob);
+  const a = document.createElement('a'); a.href = url; a.download = b.name; a.hidden = true;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  S.settings.backup = null; S.settings.msg = 'Backup file saved to your downloads.'; refreshSheet();
+}
+
+async function loadRestore(file) {
+  if (!file) return;
+  const okId = x => x && typeof x === 'object' && !Array.isArray(x) && typeof x.id === 'string' && /^[A-Za-z0-9_\-.~:@+]{1,200}$/.test(x.id) && x.id !== '.' && x.id !== '..';
+  try {
+    const j = JSON.parse(await file.text());
+    if (!j || !Array.isArray(j.systems) || !Array.isArray(j.planets) || !Array.isArray(j.finds)) throw new Error('shape');
+    const photos = {};
+    if (j.photos && typeof j.photos === 'object') {
+      for (const [id, d] of Object.entries(j.photos)) if (validAssetId(id) && typeof d === 'string' && /^data:image\/(jpeg|png|webp|gif);base64,/.test(d)) photos[id] = d;
+    }
+    S.settings.restore = { systems: j.systems.filter(okId), planets: j.planets.filter(okId), finds: j.finds.filter(okId), photos, photoCount: Object.keys(photos).length };
+    S.settings.msg = '';
+  } catch (e) {
+    S.settings.restore = null; S.settings.msg = '';
+    toast('That file isn’t a Traveller’s Log backup.');
+  }
+  refreshSheet();
+}
+
+async function doRestore() {
+  const r = S.settings.restore; if (!r || S.settings.busy) return;
+  S.settings.busy = 'restore'; refreshSheet();
+  let ok = 0, shots = 0, failed = 0;
+  const have = new Set(await store.keys('photos').catch(() => []));
+  for (const [id, d] of Object.entries(r.photos)) {
+    try {
+      const blob = await (await fetch(d)).blob();
+      await store.put('photos', id, { blob, type: blob.type, createdAt: new Date().toISOString() });
+      const u = photoUrls.get(id); if (u) URL.revokeObjectURL(u);
+      photoUrls.delete(id); have.add(id); shots++;
+    } catch (e) { failed++; }
+  }
+  for (const [coll, items] of [['systems', r.systems], ['planets', r.planets], ['finds', r.finds]]) {
+    for (const item of items) {
+      const body = Object.assign({}, item); delete body.id;
+      // Screenshots that aren't in the file or on this device would only show as empty tiles
+      body.photos = (Array.isArray(body.photos) ? body.photos : []).filter(p => have.has(p));
+      try { await store.put(coll, item.id, body); ok++; } catch (e) { failed++; }
+    }
+  }
+  try { await loadAll(); } catch (e) {}
+  changed();
+  const what = `${plural(ok, 'entry', 'entries')}${shots ? ` and ${plural(shots, 'screenshot')}` : ''}`;
+  S.settings = freshSettings({ msg: failed ? `Restored ${what}. ${failed} couldn’t be saved.` : `Restored ${what}.` });
+  refreshSheet(); render();
+}
+
+async function removeExamples() {
+  if (S.settings.busy) return;
+  S.settings.busy = 'examples'; refreshSheet();
+  try {
+    for (const coll of ['finds', 'planets', 'systems']) {
+      for (const item of all(coll).filter(x => x.example)) {
+        await withRetry(() => S.db.collection(coll).doc(item.id).delete());
+        S[coll].delete(item.id);
+      }
+    }
+    S.settings = { restore: null, busy: '', confirmExamples: false, msg: 'Examples removed. Your log is ready for your own discoveries.' };
+  } catch (e) {
+    S.settings.busy = ''; S.settings.msg = ''; toast(explain(e));
+  }
+  S.stack = S.stack.filter(r => S[COLL[r.type]].has(r.id));
+  refreshSheet(); render();
+}
+
+/* ---------- Events ---------- */
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t.closest('#lightbox')) { closeLightbox(); return; }
+  if (t.closest('#sheet')) { onSheetClick(e); return; }
+  const a = t.closest('[data-act]'); if (!a) return;
+  const ds = a.dataset;
+  switch (ds.act) {
+    case 'tab': goTab(ds.tab); break;
+    case 'back': back(); break;
+    case 'open': go(ds.type, ds.id); break;
+    case 'add': openAdd(); break;
+    case 'new': openNew(ds.kind, { systemId: ds.system || '', planetId: ds.planet || '' }); break;
+    case 'edit': openEdit(ds.type, ds.id); break;
+    case 'fav': toggleFav(ds.type, ds.id); break;
+    case 'copy': copyText(ds.text); break;
+    case 'photo': openLightbox(ds.pid); break;
+    case 'settings': openSettings(); break;
+    case 'install': doInstall(); break;
+    case 'install-later': dismissInstall(); break;
+    case 'remove-examples': openSettings({ examples: true }); break;
+    case 'sort': S.filters.sort[ds.list] = ds.sort; render(); break;
+    case 'kind': S.filters.findKind = ds.kind; render(); break;
+  }
+});
+
+function onSheetClick(e) {
+  const t = e.target;
+  if (t === sheet) { if (sheetState && sheetState.scrimClose) closeSheet(); return; }
+  const b = t.closest('[data-sheet],[data-sheet-act],[data-chip],[data-multi],[data-multi-add],[data-glyph],[data-photo-remove]');
+  if (!b || b.disabled) return;
+  const ds = b.dataset, form = sheetState && sheetState.form;
+  if (ds.sheet === 'cancel') { cancelSheet(); return; }
+  if (ds.sheet === 'save') { if (sheetState && sheetState.onSave && !(form && form.saving)) sheetState.onSave(); return; }
+  if (form && ds.chip) {
+    const f = flatFields(SPECS[form.kind]).find(x => x.k === ds.chip);
+    form.draft[ds.chip] = (form.draft[ds.chip] === ds.v && !(f && f.noClear)) ? '' : ds.v;
+    refreshSheet(); return;
+  }
+  if (form && ds.multi) {
+    const arr = form.draft[ds.multi] || [];
+    form.draft[ds.multi] = arr.includes(ds.v) ? arr.filter(x => x !== ds.v) : [...arr, ds.v];
+    refreshSheet(); return;
+  }
+  if (form && ds.multiAdd) { addCustom(form, ds.multiAdd); return; }
+  if (form && ds.glyph) {
+    const g = String(form.draft.glyphs || '');
+    form.draft.glyphs = ds.glyph === 'del' ? g.slice(0, -1) : (g.length < 12 ? g + ds.glyph : g);
+    updateGlyphField(form); return;
+  }
+  if (form && ds.photoRemove) {
+    const pid = ds.photoRemove;
+    form.draft.photos = form.draft.photos.filter(x => x !== pid);
+    if (form.uploads.includes(pid)) { form.uploads = form.uploads.filter(x => x !== pid); dropAsset(pid); }
+    else form.removed.push(pid);
+    refreshSheet(); return;
+  }
+  switch (ds.sheetAct) {
+    case 'new-system': case 'new-planet': case 'new-find': {
+      const ctx = (sheetState && sheetState.ctx) || {};
+      openNew(ds.sheetAct.slice(4), ctx); break;
+    }
+    case 'ask-delete': if (form) { form.confirmDelete = true; form.error = ''; refreshSheet(); $('#sheet-body').scrollTop = 0; } break;
+    case 'cancel-delete': if (form) { form.confirmDelete = false; refreshSheet(); } break;
+    case 'do-delete': if (form && !form.saving) performDelete(form); break;
+    case 'export': makeBackup(); break;
+    case 'backup-save': saveBackup(); break;
+    case 'backup-cancel': S.settings.backup = null; refreshSheet(); break;
+    case 'install': doInstall(); break;
+    case 'restore-go': doRestore(); break;
+    case 'restore-cancel': S.settings.restore = null; refreshSheet(); break;
+    case 'examples-ask': S.settings.confirmExamples = true; S.settings.msg = ''; refreshSheet(); break;
+    case 'examples-cancel': S.settings.confirmExamples = false; refreshSheet(); break;
+    case 'examples-go': removeExamples(); break;
+  }
+}
+
+function addCustom(form, k) {
+  const inp = $(`#f-${k}-add`); if (!inp) return;
+  const v = inp.value.trim().replace(/\s+/g, ' ').slice(0, 60);
+  if (v && !(form.draft[k] || []).includes(v)) form.draft[k] = [...(form.draft[k] || []), v];
+  refreshSheet();
+}
+
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.filter) { S.filters[t.dataset.filter] = t.value; render(); return; }
+  const form = sheetState && sheetState.form; if (!form) return;
+  if (t.id === 'f-glyphs') {
+    const v = t.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
+    if (v !== t.value) t.value = v;
+    form.draft.glyphs = v;
+    const disp = $('#glyph-display'); if (disp) disp.innerHTML = glyphStrip(v);
+    return;
+  }
+  if (t.matches('input[data-k], textarea[data-k]')) form.draft[t.dataset.k] = t.value;
+});
+
+document.addEventListener('change', e => {
+  const t = e.target, form = sheetState && sheetState.form;
+  if (t.id === 'f-photos-in') { if (form && S.assets && t.files.length) addPhotos(form, t.files); t.value = ''; return; }
+  if (t.id === 'restore-in') { loadRestore(t.files[0]); t.value = ''; return; }
+  if (form && t.matches('select[data-k]')) {
+    form.draft[t.dataset.k] = t.value;
+    if (t.dataset.k === 'systemId' && form.draft.planetId) {
+      const p = S.planets.get(form.draft.planetId);
+      if (!p || p.systemId !== t.value) form.draft.planetId = '';
+    }
+    if (t.dataset.rerender) refreshSheet();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!lightbox.hidden) { closeLightbox(); return; }
+    if (sheetState && !sheetState.form) closeSheet();
+    return;
+  }
+  if (e.key === 'Enter' && e.target.id && /^f-.+-add$/.test(e.target.id)) {
+    e.preventDefault();
+    const form = sheetState && sheetState.form;
+    if (form) addCustom(form, e.target.id.slice(2, -4));
+  }
+});
+
+// A screenshot that fails to load shows an empty tile instead of a broken image
+document.addEventListener('error', e => {
+  const el = e.target;
+  if (el && el.tagName === 'IMG' && el.hasAttribute('data-photo')) { const p = el.closest('.photo, .pthumb'); if (p) p.classList.add('broken'); }
+}, true);
+
+/* ---------- Example entries, added once the first time the app opens ---------- */
+const SEED = {
+  systems: [
+    { id: 'ex-sys-odyalutai', name: 'Odyalutai Major', galaxy: 'Euclid', region: 'Loychazinq Spur', starColor: 'Yellow', starClass: 'G2pf', lifeform: 'Korvax', economy: 'Scientific', wealth: '3', conflict: '1', glyphs: '10A2F9B3C04E', notes: 'Space station has a multi-tool merchant and an S-class Explorer that lands every few minutes. Good place to grind Korvax standing.', photos: [], favorite: true, example: true, createdAt: '2026-10-24T19:12:00.000Z', updatedAt: '2026-10-24T19:12:00.000Z' },
+    { id: 'ex-sys-ekwanosa', name: 'Ekwanosa XI', galaxy: 'Euclid', region: 'Ovbaspool Expanse', starColor: 'Red', starClass: 'M7', lifeform: 'Gek', economy: 'Trading', wealth: '2', conflict: '2', glyphs: '20471E81A3C9', notes: 'Pirates jumped me twice in orbit. Trade terminal buys Ammonia at a good markup.', photos: [], favorite: false, example: true, createdAt: '2026-10-22T21:40:00.000Z', updatedAt: '2026-10-22T21:40:00.000Z' },
+  ],
+  planets: [
+    { id: 'ex-pl-vanaber', systemId: 'ex-sys-odyalutai', name: 'Vanaber Prime', body: 'Planet', biome: 'Lush', description: 'Paradise Planet', weather: 'Mild rain', sentinels: 'Low', flora: 'Rich', fauna: 'Average', faunaFound: 5, faunaTotal: 8, resources: ['Star Bulb', 'Paraffinium', 'Carbon', 'Oxygen', 'Copper'], notes: 'Calm and green, with shallow oceans. Strong candidate for a home base.', photos: [], favorite: true, example: true, createdAt: '2026-10-24T19:40:00.000Z', updatedAt: '2026-10-24T19:40:00.000Z' },
+    { id: 'ex-pl-ruskel', systemId: 'ex-sys-odyalutai', name: 'Ruskel', body: 'Moon', biome: 'Frozen', description: 'Frozen Planet', weather: 'Blizzards', sentinels: 'Aggressive', flora: 'Sparse', fauna: 'None', faunaFound: null, faunaTotal: null, resources: ['Frost Crystal', 'Dioxite', 'Activated Indium'], notes: 'Activated Indium deposits near the north pole. Bring cold protection.', photos: [], favorite: false, example: true, createdAt: '2026-10-24T20:05:00.000Z', updatedAt: '2026-10-24T20:05:00.000Z' },
+    { id: 'ex-pl-oquaid', systemId: 'ex-sys-ekwanosa', name: 'Oquaid', body: 'Planet', biome: 'Toxic', description: 'Caustic World', weather: 'Toxic rain', sentinels: 'Average', flora: 'Average', fauna: 'Sparse', faunaFound: 2, faunaTotal: 3, resources: ['Ammonia', 'Fungal Mould', 'Pyrite'], notes: '', photos: [], favorite: false, example: true, createdAt: '2026-10-22T22:10:00.000Z', updatedAt: '2026-10-22T22:10:00.000Z' },
+  ],
+  finds: [
+    { id: 'ex-fd-hoofbeast', kind: 'creature', systemId: 'ex-sys-odyalutai', planetId: 'ex-pl-vanaber', name: 'Grumbling Hoofbeast', cls: '', subtype: 'Herbivore', coords: '+12.40, -56.81', notes: 'Docile. Feed it and it sometimes drops Fresh Milk.', photos: [], favorite: false, example: true, createdAt: '2026-10-24T19:55:00.000Z', updatedAt: '2026-10-24T19:55:00.000Z' },
+    { id: 'ex-fd-explorer', kind: 'ship', systemId: 'ex-sys-odyalutai', planetId: '', name: "Raven's Ascent", cls: 'S', subtype: 'Explorer', coords: '', notes: 'Lands at the space station about every ten minutes. Around 8.4 million units.', photos: [], favorite: true, example: true, createdAt: '2026-10-24T19:20:00.000Z', updatedAt: '2026-10-24T19:20:00.000Z' },
+    { id: 'ex-fd-ruin', kind: 'poi', systemId: 'ex-sys-odyalutai', planetId: 'ex-pl-ruskel', name: 'Buried ruin', cls: '', subtype: 'Ancient ruin', coords: '-03.15, +101.22', notes: 'Dig site with three buried caches.', photos: [], favorite: false, example: true, createdAt: '2026-10-24T20:20:00.000Z', updatedAt: '2026-10-24T20:20:00.000Z' },
+    { id: 'ex-fd-sigma', kind: 'tool', systemId: 'ex-sys-ekwanosa', planetId: 'ex-pl-oquaid', name: 'Aeon Infinity Sigma', cls: 'A', subtype: 'Experimental', coords: '+44.02, -12.90', notes: 'Sold at the trading post terminal.', photos: [], favorite: false, example: true, createdAt: '2026-10-22T22:30:00.000Z', updatedAt: '2026-10-22T22:30:00.000Z' },
+  ],
+};
+
+/* ---------- Storage: everything is kept on this device, in IndexedDB ---------- */
+const STORES = ['systems', 'planets', 'finds', 'photos', 'meta'];
+let idb = null, bc = null;
+const newId = () => { const a = new Uint8Array(12); crypto.getRandomValues(a); return Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); };
+
+function openIdb() {
+  return new Promise((res, rej) => {
+    if (!window.indexedDB) { rej(new Error('no indexedDB')); return; }
+    const req = indexedDB.open('travellers-log', 1);
+    req.onupgradeneeded = () => { for (const s of STORES) if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s); };
+    req.onsuccess = () => { const d = req.result; d.onversionchange = () => d.close(); res(d); };
+    req.onerror = () => rej(req.error);
+    req.onblocked = () => rej(new Error('blocked'));
+  });
+}
+// Runs fn inside one transaction and resolves with what fn returned, once the transaction has committed
+function tx(names, mode, fn) {
+  return new Promise((res, rej) => {
+    let t, out;
+    try { t = idb.transaction(names, mode); } catch (e) { rej(e); return; }
+    t.oncomplete = () => res(out);
+    t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error || new Error('aborted'));
+    try { out = fn(t); } catch (e) { try { t.abort(); } catch (_) {} rej(e); }
+  });
+}
+const store = {
+  get: (name, id) => tx([name], 'readonly', t => { const box = {}; t.objectStore(name).get(id).onsuccess = e => { box.v = e.target.result; }; return box; }).then(b => b.v),
+  keys: name => tx([name], 'readonly', t => { const box = {}; t.objectStore(name).getAllKeys().onsuccess = e => { box.v = e.target.result; }; return box; }).then(b => b.v || []),
+  entries: name => tx([name], 'readonly', t => { const out = []; t.objectStore(name).openCursor().onsuccess = e => { const c = e.target.result; if (c) { out.push([c.key, c.value]); c.continue(); } }; return out; }),
+  put: (name, id, v) => tx([name], 'readwrite', t => { t.objectStore(name).put(v, id); }),
+  del: (name, id) => tx([name], 'readwrite', t => { t.objectStore(name).delete(id); }),
+};
+// Other open windows of the app reload when this one saves something
+function changed() { if (bc) { try { bc.postMessage('changed'); } catch (e) {} } }
+
+// The same calls the claude.ai version makes, answered from this device
+const localDb = {
+  collection: coll => ({
+    doc: id => {
+      const docId = id || newId();
+      return {
+        id: docId,
+        set: body => store.put(coll, docId, body).then(changed),
+        update: patch => store.get(coll, docId).then(cur => {
+          if (!cur) throw { code: 'not_found' };
+          return store.put(coll, docId, Object.assign({}, cur, patch));
+        }).then(changed),
+        delete: () => store.del(coll, docId).then(changed),
+      };
+    },
+  }),
+};
+
+async function loadAll() {
+  for (const coll of ['systems', 'planets', 'finds']) {
+    const rows = await store.entries(coll);
+    S[coll] = new Map(rows.map(([id, v]) => [id, Object.assign({}, v, { id })]));
+    S.loaded[coll] = true;
+  }
+}
+async function seedOnce() {
+  if (await store.get('meta', 'seeded')) return;
+  await tx(['systems', 'planets', 'finds', 'meta'], 'readwrite', t => {
+    for (const coll of ['systems', 'planets', 'finds']) for (const d of SEED[coll]) { const b = Object.assign({}, d); delete b.id; t.objectStore(coll).put(b, d.id); }
+    t.objectStore('meta').put(new Date().toISOString(), 'seeded');
+  });
+}
+
+/* ---------- Installing ---------- */
+const IS_IOS = document.documentElement.classList.contains('ios');
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); installEvt = e;
+  scheduleRender(); if (sheetState && !sheetState.form) refreshSheet();
+});
+window.addEventListener('appinstalled', () => { installEvt = null; dismissInstall(); toast('Installed. Open Traveller’s Log from your home screen.'); });
+function installDismissed() { try { return localStorage.getItem('install-dismissed') === '1'; } catch (e) { return false; } }
+function dismissInstall() { try { localStorage.setItem('install-dismissed', '1'); } catch (e) {} S.installHidden = true; scheduleRender(); }
+function installText() {
+  if (installEvt) return 'It gets its own icon on your home screen, opens full screen and works offline.';
+  if (IS_IOS) return `In Safari, tap Share ${icon('share', 'inline-ic')} then <b>Add to Home Screen</b>. Do it before you log anything: entries saved in Safari don't carry over to the home-screen app.`;
+  return 'Open your browser menu and choose <b>Install app</b> or <b>Add to Home screen</b>. It then opens full screen and works offline.';
+}
+function installBanner() {
+  if (S.status !== 'ready' || isStandalone() || S.installHidden || installDismissed()) return '';
+  return `<div class="banner col"><div><b>Install it as an app</b><p>${installText()}</p></div><div class="banner-actions">${installEvt ? '<button class="btn btn-primary btn-sm" data-act="install">Install</button>' : ''}<button class="btn btn-sm" data-act="install-later">Not now</button></div></div>`;
+}
+async function doInstall() {
+  const e = installEvt; if (!e) return;
+  installEvt = null;
+  try { e.prompt(); await e.userChoice; } catch (err) {}
+  render(); if (sheetState && !sheetState.form) refreshSheet();
+}
+
+async function boot() {
+  document.querySelectorAll('[data-icon]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon)));
+  render();
+  try {
+    idb = await openIdb();
+    await seedOnce();
+    await loadAll();
+    S.db = localDb; S.assets = true; S.status = 'ready';
+  } catch (e) {
+    S.status = 'unsupported';
+  }
+  render();
+  try {
+    bc = new BroadcastChannel('travellers-log');
+    bc.onmessage = () => loadAll().then(() => { render(); if (sheetState && !sheetState.form) refreshSheet(); }, () => {});
+  } catch (e) {}
+  // Ask the browser not to clear the log when the phone runs low on space
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => {}); } catch (e) {}
+}
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+boot();
+})();
+</script>
+</body>
+</html>

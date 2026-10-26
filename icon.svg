@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="sky" cx="34%" cy="28%" r="90%">
+      <stop offset="0" stop-color="#2F2A5C"/>
+      <stop offset=".5" stop-color="#18152F"/>
+      <stop offset="1" stop-color="#0A0918"/>
+    </radialGradient>
+    <radialGradient id="world" cx="35%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#FFE3CC"/>
+      <stop offset=".25" stop-color="#FFA36C"/>
+      <stop offset=".6" stop-color="#E35F27"/>
+      <stop offset="1" stop-color="#5E220C"/>
+    </radialGradient>
+    <radialGradient id="halo">
+      <stop offset=".6" stop-color="#FF8B4E" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#FF8B4E" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="near"><rect x="-260" y="0" width="520" height="120"/></clipPath>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <g fill="#FFFFFF">
+    <circle cx="86" cy="104" r="3.2" opacity=".85"/>
+    <circle cx="150" cy="58" r="2" opacity=".6"/>
+    <circle cx="300" cy="64" r="1.8" opacity=".5"/>
+    <circle cx="428" cy="250" r="2.2" opacity=".55"/>
+    <circle cx="70" cy="300" r="2.4" opacity=".6"/>
+    <circle cx="112" cy="430" r="2" opacity=".5"/>
+    <circle cx="416" cy="420" r="3" opacity=".75"/>
+    <path d="M396 92 L402 112 L422 118 L402 124 L396 144 L390 124 L370 118 L390 112 Z" opacity=".9"/>
+  </g>
+  <circle cx="256" cy="256" r="172" fill="url(#halo)"/>
+  <g transform="translate(256 256) rotate(-20)">
+    <ellipse rx="186" ry="48" fill="none" stroke="#62D8D1" stroke-width="12"/>
+  </g>
+  <circle cx="256" cy="256" r="110" fill="url(#world)"/>
+  <g transform="translate(256 256) rotate(-20)">
+    <ellipse rx="186" ry="48" fill="none" stroke="#62D8D1" stroke-width="12" clip-path="url(#near)"/>
+  </g>
+</svg>
