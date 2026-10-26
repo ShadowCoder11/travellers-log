@@ -1,7 +1,7 @@
 // Keeps Traveller's Log working offline.
 // Files come from the cache straight away and are refreshed in the background,
 // so a new version of the app shows up the next time it's opened.
-const SHELL = 'tlog-shell-v1';
+const SHELL = 'tlog-shell-v2';
 const FONTS = 'tlog-fonts-v1';
 const SCOPE = self.registration.scope;
 const INDEX = new URL('./', SCOPE).href;
@@ -37,11 +37,18 @@ self.addEventListener('fetch', e => {
   }
 });
 
+// Two copies of a file are the same version when the server tags them the same
+const tag = r => r.headers.get('etag') || r.headers.get('last-modified') || '';
+
 async function cached(e, name, req, key, ignoreSearch) {
   const cache = await caches.open(name);
   const hit = await cache.match(key, { ignoreSearch });
   const fresh = fetch(req).then(res => {
-    if (res.ok) cache.put(key, res.clone()).catch(() => {});
+    if (res.ok) {
+      // The page just shown was an older version: let the app offer a reload
+      if (hit && key === INDEX && tag(res) && tag(hit) && tag(res) !== tag(hit)) tellUpdate();
+      cache.put(key, res.clone()).catch(() => {});
+    }
     return res;
   });
   if (hit) {
@@ -49,4 +56,8 @@ async function cached(e, name, req, key, ignoreSearch) {
     return hit;
   }
   return fresh;
+}
+
+function tellUpdate() {
+  self.clients.matchAll({ type: 'window' }).then(list => list.forEach(c => c.postMessage('update-ready'))).catch(() => {});
 }

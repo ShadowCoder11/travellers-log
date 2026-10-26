@@ -10,7 +10,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Traveller's Log">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -18,7 +17,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <script>
-// iPhone and iPad: a home-screen app's status bar text is always white, so the CSS keeps a dark strip behind it
+// Marks iPhone and iPad, so the install tips show the Safari steps.
+// No "status bar style" tag on purpose: on iOS 26 it shifts the layout and leaves a dark bar under the tabs,
+// while without it the status bar simply takes the page's own background colour.
 if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) document.documentElement.classList.add('ios');
 </script>
 <style>
@@ -63,8 +64,8 @@ if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIn
 [hidden]{ display:none !important }
 html{ -webkit-text-size-adjust:100% }
 html.sheet-open{ overflow:hidden }
+html{ background:var(--void) }
 @media (display-mode: standalone){ html{ overscroll-behavior-y:none } }
-@media (display-mode: standalone) and (prefers-color-scheme: light){ html.ios body::before{ background:#100E22 } }
 body{ margin:0; background:var(--void); color:var(--text); font-family:var(--f-body); font-size:16px; line-height:1.5; -webkit-tap-highlight-color:transparent }
 body::before{ content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:40; background:var(--void) }
 button{ font:inherit; color:inherit }
@@ -271,7 +272,7 @@ button:disabled{ cursor:default }
 .input:focus{ outline:2px solid var(--flare); outline-offset:0; border-color:transparent }
 .input.mono{ font-family:var(--f-mono); letter-spacing:.06em }
 textarea.input{ min-height:96px; resize:vertical; line-height:1.45 }
-.row2{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px }
+.row2{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; align-items:start }
 @media (max-width:370px){ .row2{ grid-template-columns:1fr } }
 .add-row{ display:flex; gap:8px }
 .add-row .input{ flex:1 }
@@ -302,6 +303,8 @@ textarea.input{ min-height:96px; resize:vertical; line-height:1.45 }
 .lb-close{ position:absolute; top:calc(env(safe-area-inset-top,0px) + 12px); right:calc(env(safe-area-inset-right,0px) + 12px); color:var(--on-photo); background:var(--scrim) }
 .toast{ position:fixed; z-index:70; left:16px; right:16px; margin-inline:auto; width:fit-content; bottom:calc(var(--tabbar-h) + 88px + env(safe-area-inset-bottom,0px)); padding:10px 16px; border-radius:12px; background:var(--text); color:var(--void); font-weight:700; font-size:15px; text-align:center; box-shadow:var(--shadow); opacity:0; visibility:hidden; transform:translateY(8px); transition:opacity .18s, transform .18s, visibility .18s }
 .toast.show{ opacity:1; visibility:visible; transform:none }
+.update-bar{ position:fixed; z-index:69; left:16px; right:16px; margin-inline:auto; width:fit-content; max-width:calc(100% - 32px); bottom:calc(var(--tabbar-h) + 88px + env(safe-area-inset-bottom,0px)); display:flex; align-items:center; gap:12px; padding:6px 6px 6px 16px; border-radius:14px; background:var(--text); color:var(--void); font-weight:700; font-size:15px; box-shadow:var(--shadow) }
+.update-bar .btn{ min-height:36px; background:var(--flare); color:var(--flare-ink); border-color:transparent }
 
 @keyframes flare-in{ from{ transform:scale(.7); opacity:.45 } }
 @keyframes pulse{ 50%{ opacity:.25; transform:scale(.7) } }
@@ -339,6 +342,7 @@ textarea.input{ min-height:96px; resize:vertical; line-height:1.45 }
 <div class="sheet" id="sheet" hidden></div>
 <div class="lightbox" id="lightbox" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="update-bar" id="update-bar" role="status" hidden><span>New version ready</span><button type="button" class="btn btn-sm" data-act="reload">Reload</button></div>
 
 <script>
 (() => {
@@ -374,8 +378,26 @@ const GALAXIES = ['Euclid','Hilbert Dimension','Calypso','Hesperius Dimension','
 const BIOMES = { Lush:'#5CC46A', Barren:'#C9A26B', Dead:'#8D8A9E', Exotic:'#E36BD3', Frozen:'#9FD8F0', Irradiated:'#B9E04A', Scorched:'#F07A3A', Toxic:'#D8C83A', Marsh:'#6F9E7A', Volcanic:'#E0503A', Waterworld:'#3E8FE0', 'Gas Giant':'#D9B07A', Other:'#A29DC0' };
 const PLANET_TYPES = ['Paradise Planet','Temperate Planet','Tropical Planet','Lush Planet','Frozen Planet','Icy Planet','Toxic Planet','Caustic World','Radioactive Planet','Scorched Planet','Desert Planet','Dead Planet','Airless Planet','Bubbling Planet','Glassy Planet','Gas Giant'];
 const WEATHER = ['Clear skies','Mild rain','Humid','Heavy rain','Freezing','Blizzards','Scorching','Firestorms','Toxic rain','Radioactive storms','Dust storms','Superheated storms','No atmosphere'];
-const SENTINELS = ['None','Low','Average','Aggressive','Frenzied','Corrupted'];
-const LIFE_LEVELS = ['','None','Sparse','Average','Rich'];
+// The words a planet's Discoveries entry uses, grouped by what they mean: [level, heading, words]
+const SENTINEL_WORDS = [
+  ['None', 'None', ['Absent', 'Missing', 'None', 'None Present', 'Not Present']],
+  ['Low', 'Low', ['Few', 'Infrequent', 'Intermittent', 'Irregular Patrols', 'Isolated', 'Limited', 'Low', 'Low Security', 'Minimal', 'Remote', 'Sparse', 'Spread Thin']],
+  ['Standard', 'Standard', ['Attentive', 'Enforcing', 'Ever-present', 'Frequent', 'Observant', 'Regular Patrols', 'Require Obedience', 'Require Orthodoxy', 'Unwavering']],
+  ['Aggressive', 'Aggressive', ['Aggressive', 'Frenzied', 'Hateful', 'High Security', 'Hostile Patrols', 'Inescapable', 'Malicious', 'Threatening', 'Zealous']],
+  ['Corrupted', 'Corrupted (dissonant worlds)', ['Answer To None', 'Corrupted', 'De-Harmonised', 'Dissonant', 'Forsaken', 'Rebellious', 'Sharded from the Atlas']],
+];
+const FLORA_WORDS = [
+  ['None', 'None', ['Absent', 'Barren', 'Deficient', 'Devoid', 'Empty', 'Lacking', 'None', 'Nonexistent', 'Not Present', 'Undetected']],
+  ['Low', 'Low', ['Few', 'Infrequent', 'Intermittent', 'Limited', 'Low', 'Rare', 'Scarce', 'Sparse', 'Sporadic', 'Uncommon']],
+  ['Average', 'Average', ['Average', 'Common', 'Fair', 'Medium', 'Moderate', 'Numerous', 'Occasional', 'Ordinary', 'Regular', 'Typical']],
+  ['High', 'High', ['Abundant', 'Ample', 'Bountiful', 'Copious', 'Frequent', 'Full', 'Generous', 'High', 'Rich']],
+  ['Weird', 'Weird (exotic worlds)', ['Between Worlds', 'Displaced', 'Forfeited', 'From Elsewhere', 'Lost', 'Misplaced', 'Unusual', 'Uprooted']],
+  ['Infected', 'Infected', ['Diseased', 'Infected', 'Invasive', 'Screaming', 'Twisted', 'Viral']],
+];
+const FAUNA_WORDS = FLORA_WORDS.map(([lv, head, ws]) => [lv, head, ws.filter(w => w !== 'Viral')]);
+const tierOf = (groups, w) => { const g = w && groups.find(x => x[2].includes(w)); return g ? g[0] : ''; };
+// "Spread Thin (low)", so the game's odder words still say how much there is
+const withTier = (groups, w) => { const t = tierOf(groups, w); return t && t !== w ? `${w} (${t.toLowerCase()})` : (w || ''); };
 const RESOURCES = ['Carbon','Ferrite Dust','Pure Ferrite','Magnetised Ferrite','Oxygen','Sodium','Di-hydrogen','Cobalt','Chlorine','Salt','Copper','Cadmium','Emeril','Indium','Activated Copper','Activated Cadmium','Activated Emeril','Activated Indium','Paraffinium','Pyrite','Ammonia','Uranium','Dioxite','Phosphorus','Silver','Gold','Platinum','Star Bulb','Gamma Root','Cactus Flesh','Frost Crystal','Fungal Mould','Solanium','Mordite','Rusted Metal','Ancient Bones','Storm Crystals','Salvageable Scrap','Kelp Sac','Cyto-Phosphate','Marrow Bulb','Sac Venom'];
 const FIND_KINDS = [['creature','Creature'],['plant','Plant'],['mineral','Mineral'],['ship','Starship'],['tool','Multi-tool'],['base','Base'],['poi','Point of interest'],['other','Other']];
 const KIND_LABEL = Object.fromEntries(FIND_KINDS);
@@ -455,7 +477,7 @@ const biomeColor = b => BIOMES[b] || BIOMES.Other;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const hay = (...xs) => xs.flat().filter(Boolean).join(' ').toLowerCase();
 const sysHay = s => hay(s.name, s.galaxy, s.region, s.starColor, s.starClass, s.lifeform, s.economy, s.notes, s.glyphs);
-const plHay = p => hay(p.name, p.body, p.biome, p.description, p.weather, p.sentinels, p.resources, p.notes);
+const plHay = p => hay(p.name, p.body, p.biome, p.description, p.weather, p.sentinels, tierOf(SENTINEL_WORDS, p.sentinels), p.flora, p.fauna, p.resources, p.notes);
 const fdHay = f => hay(f.name, KIND_LABEL[f.kind], f.subtype, f.cls ? f.cls + '-class' : '', f.coords, f.notes);
 const exampleCount = () => ['systems', 'planets', 'finds'].reduce((n, c) => n + all(c).filter(x => x.example).length, 0);
 
@@ -571,7 +593,8 @@ function systemRow(s, X) {
 function planetRow(p, showSystem = true) {
   const sys = S.systems.get(p.systemId);
   const sub = [p.body === 'Moon' ? 'Moon' : 'Planet', p.biome, showSystem ? (sys ? sys.name : 'Unknown system') : p.description].filter(Boolean).join(' · ');
-  const hostile = ['Aggressive', 'Frenzied', 'Corrupted'].includes(p.sentinels) ? `<span class="badge badge-warn">${esc(p.sentinels)}</span>` : '';
+  const st = tierOf(SENTINEL_WORDS, p.sentinels);
+  const hostile = st === 'Aggressive' || st === 'Corrupted' ? `<span class="badge badge-warn">${st}</span>` : '';
   return `<button class="row" data-act="open" data-type="planet" data-id="${esc(p.id)}">${planetDisc(p)}<span class="row-main"><span class="row-title">${esc(p.name || 'Unnamed')}</span><span class="row-sub">${esc(sub)}</span></span>${rowEnd(p, hostile)}</button>`;
 }
 function findWhere(f) {
@@ -723,7 +746,7 @@ function viewPlanet(id, X) {
       <h2>${esc(p.name || 'Unnamed')}</h2>
       <div class="crumbs">${sys ? `<button class="crumb" data-act="open" data-type="system" data-id="${esc(sys.id)}">${starDot(sys.starColor)}<span>${esc(sys.name)}</span>${icon('chevron')}</button>` : '<span class="badge">Unknown system</span>'}</div>
       ${heroActions('planet', p)}</section>`,
-    statsBlock([['In-game type', p.description], ['Weather', p.weather], ['Sentinels', p.sentinels], ['Flora', p.flora], ['Fauna', p.fauna]]),
+    statsBlock([['In-game type', p.description], ['Weather', p.weather], ['Sentinels', withTier(SENTINEL_WORDS, p.sentinels)], ['Flora', withTier(FLORA_WORDS, p.flora)], ['Fauna', withTier(FAUNA_WORDS, p.fauna)]]),
     ft ? section('Fauna discovered', '', `<div class="fauna"><div class="fauna-line"><span>${ff === ft ? 'All creatures found' : 'Creatures found'}</span><b>${ff} / ${ft}</b></div><div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="${ft}" aria-valuenow="${ff}"><i style="width:${Math.round(ff / ft * 100)}%"></i></div></div>`) : '',
     (p.resources || []).length ? section(`Resources<span class="count">${p.resources.length}</span>`, '', `<div class="tags">${p.resources.map(r => `<span class="tag">${esc(r)}</span>`).join('')}</div>`) : '',
     notesBlock(p.notes),
@@ -800,8 +823,8 @@ const SPECS = {
     { k: 'body', t: 'chips', label: 'Body', options: ['Planet', 'Moon'], noClear: true },
     { k: 'biome', t: 'chips', label: 'Biome', options: Object.keys(BIOMES), swatch: biomeColor },
     { row: [ { k: 'description', t: 'text', label: 'In-game type', list: PLANET_TYPES, placeholder: 'Paradise Planet' }, { k: 'weather', t: 'text', label: 'Weather', list: WEATHER } ] },
-    { k: 'sentinels', t: 'chips', label: 'Sentinels', options: SENTINELS },
-    { row: [ { k: 'flora', t: 'select', label: 'Flora', options: LIFE_LEVELS }, { k: 'fauna', t: 'select', label: 'Fauna', options: LIFE_LEVELS } ] },
+    { k: 'sentinels', t: 'words', label: 'Sentinels', groups: SENTINEL_WORDS, hint: 'Pick the word the game shows. The list runs from no sentinels to corrupted ones.' },
+    { row: [ { k: 'flora', t: 'words', label: 'Flora', groups: FLORA_WORDS }, { k: 'fauna', t: 'words', label: 'Fauna', groups: FAUNA_WORDS } ] },
     { k: 'faunaFound', k2: 'faunaTotal', t: 'pair', label: 'Fauna discovered', hint: 'From the Discoveries menu, for example 5 of 8.' },
     { k: 'resources', t: 'multi', label: 'Resources', options: RESOURCES },
     { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Storms, good base spots, where the deposits are' },
@@ -875,6 +898,15 @@ function renderField(f, form) {
     }
     case 'textarea':
       return `<label class="field" for="${id}">${lbl()}<textarea class="input" id="${id}" data-k="${f.k}" rows="4" placeholder="${esc(f.placeholder || '')}" autocapitalize="sentences">${esc(val(d[f.k]))}</textarea>${hint}</label>`;
+    case 'words': {
+      // Grouped dropdown of the game's own words, plus a box for anything not on the list
+      const v = val(d[f.k]);
+      const known = f.groups.some(g => g[2].includes(v));
+      const other = !!(form.other && form.other[f.k]) || (!!v && !known);
+      const sel = other ? '__other' : v;
+      const opt = (value, label) => `<option value="${esc(value)}"${value === sel ? ' selected' : ''}>${esc(label)}</option>`;
+      return `<label class="field" for="${id}">${lbl()}<select class="input" id="${id}" data-words="${f.k}">${opt('', 'Not recorded')}${f.groups.map(([, head, ws]) => `<optgroup label="${esc(head)}">${ws.map(w => opt(w, w)).join('')}</optgroup>`).join('')}${opt('__other', 'Other (type it)')}</select>${other ? `<input class="input" id="${id}-other" data-k="${f.k}" value="${esc(v)}" placeholder="Type the word the game shows" aria-label="${esc(f.label)}, as the game shows it" autocomplete="off" autocapitalize="words">` : ''}${hint}</label>`;
+    }
     case 'select':
       return `<label class="field" for="${id}">${lbl()}<select class="input" id="${id}" data-k="${f.k}">${optPairs(f.options).map(([v, l]) => `<option value="${esc(v)}"${val(d[f.k]) === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${hint}</label>`;
     case 'chips':
@@ -1273,6 +1305,7 @@ document.addEventListener('click', e => {
     case 'settings': openSettings(); break;
     case 'install': doInstall(); break;
     case 'install-later': dismissInstall(); break;
+    case 'reload': location.reload(); break;
     case 'remove-examples': openSettings({ examples: true }); break;
     case 'sort': S.filters.sort[ds.list] = ds.sort; render(); break;
     case 'kind': S.filters.findKind = ds.kind; render(); break;
@@ -1355,6 +1388,15 @@ document.addEventListener('change', e => {
   const t = e.target, form = sheetState && sheetState.form;
   if (t.id === 'f-photos-in') { if (form && S.assets && t.files.length) addPhotos(form, t.files); t.value = ''; return; }
   if (t.id === 'restore-in') { loadRestore(t.files[0]); t.value = ''; return; }
+  if (form && t.dataset.words) {
+    const k = t.dataset.words;
+    form.other = form.other || {};
+    form.other[k] = t.value === '__other';
+    form.draft[k] = form.other[k] ? '' : t.value;
+    refreshSheet();
+    if (form.other[k]) { const o = $(`#f-${k}-other`); if (o) o.focus(); }
+    return;
+  }
   if (form && t.matches('select[data-k]')) {
     form.draft[t.dataset.k] = t.value;
     if (t.dataset.k === 'systemId' && form.draft.planetId) {
@@ -1393,7 +1435,7 @@ const SEED = {
   planets: [
     { id: 'ex-pl-vanaber', systemId: 'ex-sys-odyalutai', name: 'Vanaber Prime', body: 'Planet', biome: 'Lush', description: 'Paradise Planet', weather: 'Mild rain', sentinels: 'Low', flora: 'Rich', fauna: 'Average', faunaFound: 5, faunaTotal: 8, resources: ['Star Bulb', 'Paraffinium', 'Carbon', 'Oxygen', 'Copper'], notes: 'Calm and green, with shallow oceans. Strong candidate for a home base.', photos: [], favorite: true, example: true, createdAt: '2026-10-24T19:40:00.000Z', updatedAt: '2026-10-24T19:40:00.000Z' },
     { id: 'ex-pl-ruskel', systemId: 'ex-sys-odyalutai', name: 'Ruskel', body: 'Moon', biome: 'Frozen', description: 'Frozen Planet', weather: 'Blizzards', sentinels: 'Aggressive', flora: 'Sparse', fauna: 'None', faunaFound: null, faunaTotal: null, resources: ['Frost Crystal', 'Dioxite', 'Activated Indium'], notes: 'Activated Indium deposits near the north pole. Bring cold protection.', photos: [], favorite: false, example: true, createdAt: '2026-10-24T20:05:00.000Z', updatedAt: '2026-10-24T20:05:00.000Z' },
-    { id: 'ex-pl-oquaid', systemId: 'ex-sys-ekwanosa', name: 'Oquaid', body: 'Planet', biome: 'Toxic', description: 'Caustic World', weather: 'Toxic rain', sentinels: 'Average', flora: 'Average', fauna: 'Sparse', faunaFound: 2, faunaTotal: 3, resources: ['Ammonia', 'Fungal Mould', 'Pyrite'], notes: '', photos: [], favorite: false, example: true, createdAt: '2026-10-22T22:10:00.000Z', updatedAt: '2026-10-22T22:10:00.000Z' },
+    { id: 'ex-pl-oquaid', systemId: 'ex-sys-ekwanosa', name: 'Oquaid', body: 'Planet', biome: 'Toxic', description: 'Caustic World', weather: 'Toxic rain', sentinels: 'Regular Patrols', flora: 'Average', fauna: 'Sparse', faunaFound: 2, faunaTotal: 3, resources: ['Ammonia', 'Fungal Mould', 'Pyrite'], notes: '', photos: [], favorite: false, example: true, createdAt: '2026-10-22T22:10:00.000Z', updatedAt: '2026-10-22T22:10:00.000Z' },
   ],
   finds: [
     { id: 'ex-fd-hoofbeast', kind: 'creature', systemId: 'ex-sys-odyalutai', planetId: 'ex-pl-vanaber', name: 'Grumbling Hoofbeast', cls: '', subtype: 'Herbivore', coords: '+12.40, -56.81', notes: 'Docile. Feed it and it sometimes drops Fresh Milk.', photos: [], favorite: false, example: true, createdAt: '2026-10-24T19:55:00.000Z', updatedAt: '2026-10-24T19:55:00.000Z' },
@@ -1520,6 +1562,9 @@ async function boot() {
 }
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  // sw.js says so when it has just downloaded a newer version of the app
+  navigator.serviceWorker.addEventListener('message', e => { if (e.data === 'update-ready') $('#update-bar').hidden = false; });
+  try { navigator.serviceWorker.startMessages(); } catch (e) {}
 }
 boot();
 })();
