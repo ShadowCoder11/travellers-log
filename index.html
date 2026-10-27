@@ -201,6 +201,25 @@ button:disabled{ cursor:default }
 .here b, .here small{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .here small{ color:var(--muted); font-size:14px }
 
+/* Trade routes */
+.steps{ display:grid; gap:16px }
+.step{ display:grid; gap:8px; min-width:0 }
+.step-head{ display:flex; align-items:flex-start; gap:10px }
+.step-n{ flex:none; width:26px; height:26px; margin-top:1px; border-radius:50%; display:grid; place-items:center; background:var(--flare-soft); color:var(--flare); font-family:var(--f-display); font-weight:700; font-size:14px }
+.step-head > div{ display:grid; min-width:0 }
+.step-head b{ font-size:16px }
+.step-head small{ color:var(--muted); font-size:14px }
+.step > .muted-note{ margin-left:36px; font-size:14px; color:var(--faint) }
+.chip-box .guide-sub{ margin:4px 2px 8px }
+.chip-box .chips + .guide-sub{ margin-top:14px }
+.pct{ display:flex; align-items:center; gap:6px }
+.pct > span{ flex:none; font-family:var(--f-mono); font-weight:600; color:var(--muted) }
+.pct .input{ flex:1 }
+
+/* Recipe book */
+.tags .plus{ align-self:center; color:var(--faint); font-weight:700 }
+.tag-link{ color:var(--flare); border-color:color-mix(in srgb, var(--flare) 40%, transparent); font:inherit; font-size:14px; cursor:pointer }
+
 /* Biome guide in the planet form */
 .guide{ border:1px solid var(--line-soft); border-radius:var(--r-m); background:var(--hull) }
 .guide > summary{ display:flex; align-items:center; flex-wrap:wrap; gap:4px 10px; min-height:44px; padding:8px 12px; cursor:pointer; list-style:none; color:var(--flare); font-weight:700; font-size:15px }
@@ -457,8 +476,8 @@ const ECONOMY_WORDS = [
   ['Technology', ['Technology', 'High Tech', 'Nano-construction', 'Engineering']],
   ['Scientific', ['Scientific', 'Research', 'Experimental', 'Mathematical']],
   ['Power Generation', ['Power Generation', 'Energy Supply', 'Fuel Generation', 'High Voltage']],
-  ['Advanced Materials', ['Advanced Materials', 'Alchemical', 'Metal Processing', 'Material Fusion']],
-  ['Black Market', ['Black Market', 'Pirate', 'Outlaw', 'Skull'], 'Outlaw (pirate) systems, marked with a skull'],
+  ['Advanced Materials', ['Advanced Materials', 'Alchemical', 'Metal Processing', 'Material Fusion', 'Ore Processing']],
+  ['Black Market', ['Black Market', 'Pirate', 'Outlaw', 'Skull'], 'Pirate systems show this instead of a wealth word. If the map also names an economy, pick that instead, and set Wealth to Pirate controlled.'],
   ['None', ['None', 'Abandoned'], 'Abandoned systems with no economy'],
 ];
 // The Economy dropdown: every word the Galaxy Map uses, grouped by economy type
@@ -471,6 +490,28 @@ const WEALTH_WORDS = [
   ['pirate', 'Pirate controlled', ['Pirate', 'Outlaw', 'Skull', 'Black Market'], 'A skull icon instead of a wealth word'],
   ['none', 'No economy (abandoned)', ['None', 'Abandoned'], 'Abandoned systems'],
 ];
+// Trade goods, from the No Man's Sky wiki's Economy and Tradeable pages. Each economy sells its own
+// goods (tier 1, worth most, first) and they sell for the most in one other economy. That makes two loops:
+// Trading → Advanced Materials → Scientific → Trading, and Mining → Manufacturing → Technology → Power Generation → Mining.
+const TRADE_GOODS = [
+  ['Trading', ['Teleport Coordinators', 'Ion Sphere', 'Comet Droplets', 'Star Silk', 'Decrypted User Data']],
+  ['Advanced Materials', ['Superconducting Fibre', 'Five Dimensional Torus', 'Optical Solvent', 'Self-Repairing Heridium', 'Nanotube Crate']],
+  ['Scientific', ['Neural Duct', 'Organic Piping', 'Instability Injector', 'Neutron Microscope', 'De-Scented Pheromone Bottle']],
+  ['Mining', ['Re-latticed Arc Crystal', 'Polychromatic Zirconium', 'Bromide Salt', 'Unrefined Pyrite Grease', 'Dirt']],
+  ['Manufacturing', ['High Capacity Vector Compressor', 'Holographic Crankshaft', 'Six-Pronged Mesh Decoupler', 'Non-Stick Piston', 'Enormous Metal Cog']],
+  ['Technology', ['Quantum Accelerator', 'Autonomous Positioning Unit', 'Ion Capacitor', 'Welding Soap', 'Decommissioned Circuit Board']],
+  ['Power Generation', ['Fusion Core', 'Experimental Power Fluid', 'Ohmic Gel', 'Industrial-Grade Battery', 'Spark Canister']],
+];
+const TRADE_DEMAND = { 'Trading': 'Advanced Materials', 'Advanced Materials': 'Scientific', 'Scientific': 'Trading', 'Mining': 'Manufacturing', 'Manufacturing': 'Technology', 'Technology': 'Power Generation', 'Power Generation': 'Mining' };
+const TIER_VALUE = [50000, 30000, 15000, 6000, 1000];   // galactic average price, tier 1 to 5
+// Bought in pirate systems, sold in any other system (where cargo scans can catch you)
+const SMUGGLED = [['First Spawn Relics', 98000], ['Banned Weapons', 83000], ['Counterfeit Circuits', 68000], ['GrahGrah', 58000], ['Prismatic Feathers', 32000], ['Moon Ether', 18000], ['Stolen DNA Samples', 9000], ['Blood Salt', 2000]];
+// The Galaxy Map's economy filter colours (needs the Economy Scanner)
+const ECON_COLOUR = { 'Trading': 'green', 'Advanced Materials': 'purple', 'Scientific': 'dark blue', 'Mining': 'orange', 'Manufacturing': 'yellow', 'Technology': 'light blue', 'Power Generation': 'red' };
+const GOODS = new Map();   // name → { econ, tier, value }
+TRADE_GOODS.forEach(([econ, gs]) => gs.forEach((g, i) => GOODS.set(g, { econ, tier: i + 1, value: TIER_VALUE[i] })));
+SMUGGLED.forEach(([g, value]) => GOODS.set(g, { econ: '', tier: 0, value }));
+const goodsOf = econ => (TRADE_GOODS.find(x => x[0] === econ) || [, []])[1];
 
 // Biomes whose words appear in what was typed, e.g. "Hiemal Planet" → Frozen
 function biomeMatches(text) {
@@ -512,7 +553,8 @@ const SUBTYPES = {
   poi:['Ancient ruin','Crashed freighter','Crashed starship','Abandoned building','Portal','Monolith','Trading post','Settlement','Derelict freighter','Distress signal'],
 };
 const MAX_PHOTOS = 8;
-const COLL = { system:'systems', planet:'planets', find:'finds' };
+const COLL = { system:'systems', planet:'planets', find:'finds', recipe:'recipes' };
+const COLLS = ['systems', 'planets', 'finds', 'recipes'];
 
 /* ---------- Icons ---------- */
 const I = {
@@ -543,6 +585,8 @@ const I = {
   poi:'<path d="M12 21s-6.5-5.6-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.3"/>',
   other:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4.6M12 16h.01"/>',
   share:'<path d="M12 14.5V3.5M8 7.2l4-3.7 4 3.7M7.5 10H5.5v10.5h13V10h-2"/>',
+  trade:'<path d="M4 8h15M15.5 4.5L19 8l-3.5 3.5M20 16H5M8.5 12.5L5 16l3.5 3.5"/>',
+  recipe:'<path d="M3.5 11.5h17a8.5 8.5 0 0 1-17 0zM9 3.8c-.9 1.1.9 2.1 0 3.2M12 3.3c-.9 1.1.9 2.1 0 3.2M15 3.8c-.9 1.1.9 2.1 0 3.2"/>',
 };
 const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || ''}</svg>`;
 const glyphSvg = h => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${GLYPH_PATHS[h] || ''}</svg>`;
@@ -552,10 +596,11 @@ const S = {
   db: null, assets: null,
   status: 'connecting',         // connecting | ready | unsupported
   canWrite: true,
-  systems: new Map(), planets: new Map(), finds: new Map(),
-  loaded: { systems: false, planets: false, finds: false },
+  systems: new Map(), planets: new Map(), finds: new Map(), recipes: new Map(),
+  loaded: { systems: false, planets: false, finds: false, recipes: false },
   tab: 'log', stack: [], scrolls: [],
-  filters: { log: '', systems: '', planets: '', finds: '', findKind: 'all', resource: '', sort: { systems: 'recent', planets: 'recent', finds: 'recent' } },
+  filters: { log: '', systems: '', planets: '', finds: '', recipes: '', findKind: 'all', resource: '', sort: { systems: 'recent', planets: 'recent', finds: 'recent' } },
+  goods: new Set(),             // trade goods you said you're carrying
   settings: { restore: null, busy: '', confirmExamples: false, msg: '', backup: null, usage: '' },
   installHidden: false,
   here: null,                   // the system you said you're in, kept on this phone
@@ -586,6 +631,7 @@ const hay = (...xs) => xs.flat().filter(Boolean).join(' ').toLowerCase();
 const sysHay = s => hay(s.name, s.galaxy, s.region, s.starColor, s.starClass, s.lifeform, s.economy, tierOf(ECON_GROUPS, s.economy), s.notes, s.glyphs);
 const plHay = p => hay(p.name, p.body, p.biome, p.description, p.weather, p.sentinels, tierOf(SENTINEL_WORDS, p.sentinels), p.flora, p.fauna, p.resources, p.notes);
 const fdHay = f => hay(f.name, KIND_LABEL[f.kind], f.subtype, f.cls ? f.cls + '-class' : '', f.coords, f.notes);
+const rcHay = r => hay(r.name, Array.isArray(r.ingredients) ? r.ingredients : [], r.notes);
 const exampleCount = () => ['systems', 'planets', 'finds'].reduce((n, c) => n + all(c).filter(x => x.example).length, 0);
 
 function indexes() {
@@ -658,6 +704,9 @@ function renderTop(route) {
   if (route.type === 'planet') title = (S.planets.get(route.id) || {}).body === 'Moon' ? 'Moon' : 'Planet';
   if (route.type === 'find') title = KIND_LABEL[(S.finds.get(route.id) || {}).kind] || 'Find';
   if (route.type === 'resources') title = 'Resource finder';
+  if (route.type === 'trade') title = 'Trade routes';
+  if (route.type === 'recipes') title = 'Recipe book';
+  if (route.type === 'recipe') title = 'Recipe';
   if (route.type === 'tab' && S.tab === 'log') {
     action = `<button class="icon-btn" data-act="settings" aria-label="Log settings">${icon('sliders')}</button>`;
   } else if (COLL[route.type] && S.canWrite && isMine(S[COLL[route.type]].get(route.id))) {
@@ -674,6 +723,9 @@ function viewFor(route, X) {
   if (route.type === 'planet') return { key: 'p:' + route.id, head: '', body: viewPlanet(route.id, X) };
   if (route.type === 'find') return { key: 'f:' + route.id, head: '', body: viewFind(route.id) };
   if (route.type === 'resources') return { key: 'resources', head: '', body: viewResources() };
+  if (route.type === 'trade') return { key: 'trade', head: '', body: viewTrade() };
+  if (route.type === 'recipes') return { key: 'recipes', head: searchBox('recipes', 'Search dishes and ingredients'), body: viewRecipes() };
+  if (route.type === 'recipe') return { key: 'r:' + route.id, head: '', body: viewRecipe(route.id) };
   if (S.tab === 'systems') return { key: 'tab:systems', head: searchBox('systems', 'Filter by name, galaxy, region, glyphs'), body: viewSystems(X) };
   if (S.tab === 'planets') return { key: 'tab:planets', head: searchBox('planets', 'Filter by name, biome, resource'), body: viewPlanets() };
   if (S.tab === 'finds') return { key: 'tab:finds', head: searchBox('finds', 'Filter by name, type, notes'), body: viewFinds() };
@@ -703,10 +755,12 @@ function rowEnd(item, extra = '') {
   const who = item._crew ? `<span class="badge badge-crew"><span>${esc(ownerName(item._owner))}</span></span>` : '';
   return `<span class="row-end">${who}${extra}${item.favorite ? icon('star', 'ic-fav') : ''}${icon('chevron', 'ic-chev')}</span>`;
 }
-// `note` goes first in the grey line under the name, e.g. "Edited"
-function systemRow(s, X, note = '') {
-  const np = X.ps(s.id).length, nf = X.fs(s.id).length;
-  const sub = [note, s.galaxy, s.lifeform && s.lifeform !== 'None' ? s.lifeform : '', plural(np, 'planet'), nf ? plural(nf, 'find') : ''].filter(Boolean).join(' · ');
+// `note` goes first in the grey line under the name, e.g. "Edited". `sub` replaces that line.
+function systemRow(s, X, note = '', sub = '') {
+  if (!sub) {
+    const np = X.ps(s.id).length, nf = X.fs(s.id).length;
+    sub = [note, s.galaxy, s.lifeform && s.lifeform !== 'None' ? s.lifeform : '', plural(np, 'planet'), nf ? plural(nf, 'find') : ''].filter(Boolean).join(' · ');
+  }
   return `<button class="row" data-act="open" data-type="system" data-id="${esc(s.id)}">${starDot(s.starColor)}<span class="row-main"><span class="row-title">${esc(s.name || 'Unnamed system')}</span><span class="row-sub">${esc(sub)}</span></span>${rowEnd(s)}</button>`;
 }
 // Every creature on the world found (on a crewmate's planet, by you)
@@ -734,8 +788,24 @@ function findRow(f, showWhere = true, note = '') {
   const cls = f.cls ? `<span class="badge badge-cls${f.cls === 'S' ? ' s' : ''}">${esc(f.cls)}</span>` : '';
   return `<button class="row" data-act="open" data-type="find" data-id="${esc(f.id)}">${kindTile(f.kind)}<span class="row-main"><span class="row-title">${esc(f.name || 'Unnamed find')}</span><span class="row-sub">${esc(sub)}</span></span>${rowEnd(f, cls)}</button>`;
 }
-const rowFor = (t, v, X, note = '') => t === 'system' ? systemRow(v, X, note) : t === 'planet' ? planetRow(v, true, '', note) : findRow(v, true, note);
-const finderLink = () => listOf([`<button class="row" data-act="resources">${kindTile('mineral')}<span class="row-main"><span class="row-title">Resource finder</span><span class="row-sub">Which planets have what you need</span></span><span class="row-end">${icon('chevron', 'ic-chev')}</span></button>`]);
+function recipeRow(r, note = '') {
+  const ing = (Array.isArray(r.ingredients) ? r.ingredients : []).filter(Boolean);
+  const sub = [note, ing.length ? ing.join(' + ') : 'No ingredients noted'].filter(Boolean).join(' · ');
+  return `<button class="row" data-act="open" data-type="recipe" data-id="${esc(r.id)}"><span class="kind-tile" aria-hidden="true">${icon('recipe')}</span><span class="row-main"><span class="row-title">${esc(r.name || 'Unnamed recipe')}</span><span class="row-sub">${esc(sub)}</span></span>${rowEnd(r)}</button>`;
+}
+const rowFor = (t, v, X, note = '') => t === 'system' ? systemRow(v, X, note) : t === 'planet' ? planetRow(v, true, '', note) : t === 'recipe' ? recipeRow(v, note) : findRow(v, true, note);
+const toolRow = (act, ic, title, sub) => `<button class="row" data-act="${act}"><span class="kind-tile" aria-hidden="true">${icon(ic)}</span><span class="row-main"><span class="row-title">${title}</span><span class="row-sub">${sub}</span></span><span class="row-end">${icon('chevron', 'ic-chev')}</span></button>`;
+const finderRow = () => toolRow('resources', 'mineral', 'Resource finder', 'Which planets have what you need');
+const finderLink = () => listOf([finderRow()]);
+// The Log's tools: resource finder, trade routes, recipe book
+function toolsCard() {
+  const nr = S.recipes.size;
+  return listOf([
+    S.planets.size ? finderRow() : '',
+    toolRow('trade', 'trade', 'Trade routes', 'Where to sell for the most units'),
+    toolRow('recipes', 'recipe', 'Recipe book', nr ? `${plural(nr, 'recipe')}${crew.code ? ', shared with your crew' : ''}` : (crew.code ? 'Food recipes, shared with your crew' : 'Your food recipes')),
+  ].filter(Boolean));
+}
 
 function glyphStrip(code) {
   const chars = String(code || '').toUpperCase().split('');
@@ -794,13 +864,14 @@ function viewLog(X) {
   const ns = mineOf('systems').length, np = mineOf('planets').length, nf = mineOf('finds').length;
   if (!(ns + np + nf)) {
     out.push(emptyState('Your log is empty', 'Warp somewhere new, then log the system: its star, economy and portal glyphs. Planets and finds go inside it.', S.canWrite ? newBtn('system', 'Log a star system') : ''));
+    out.push(toolsCard());
     if (crew.code) out.push(crewNewSection(X), crewFeed(X));
     return out.join('');
   }
   out.push(`<div class="totals">${[['systems', ns, 'Systems'], ['planets', np, 'Planets'], ['finds', nf, 'Finds']].map(([t, n, l]) => `<button class="total" data-act="tab" data-tab="${t}"><b>${n}</b><span>${l}</span></button>`).join('')}</div>`);
-  if (S.planets.size) out.push(finderLink());
+  out.push(toolsCard());
   if (crew.code) out.push(crewNewSection(X));
-  const tagged = [...mineOf('systems').map(v => ['system', v]), ...mineOf('planets').map(v => ['planet', v]), ...mineOf('finds').map(v => ['find', v])];
+  const tagged = [...mineOf('systems').map(v => ['system', v]), ...mineOf('planets').map(v => ['planet', v]), ...mineOf('finds').map(v => ['find', v]), ...mineOf('recipes').map(v => ['recipe', v])];
   const favs = tagged.filter(([, v]) => v.favorite);
   if (favs.length) out.push(section(`Starred<span class="count">${favs.length}</span>`, '', listOf(favs.map(([t, v]) => rowFor(t, v, X)))));
   const recent = tagged.sort((a, b) => byRecent(a[1], b[1])).slice(0, 12);
@@ -836,11 +907,13 @@ function searchResults(q, X) {
   const ss = all('systems').filter(s => sysHay(s).includes(q)).sort(byName);
   const ps = all('planets').filter(p => plHay(p).includes(q)).sort(byName);
   const fs = all('finds').filter(f => fdHay(f).includes(q)).sort(byName);
-  if (!ss.length && !ps.length && !fs.length) return noMatch(S.filters.log.trim());
+  const rs = all('recipes').filter(r => rcHay(r).includes(q)).sort(byName);
+  if (!ss.length && !ps.length && !fs.length && !rs.length) return noMatch(S.filters.log.trim());
   return [
     ss.length ? section(`Systems<span class="count">${ss.length}</span>`, '', listOf(ss.map(s => systemRow(s, X)))) : '',
     ps.length ? section(`Planets & moons<span class="count">${ps.length}</span>`, '', listOf(ps.map(p => planetRow(p)))) : '',
     fs.length ? section(`Finds<span class="count">${fs.length}</span>`, '', listOf(fs.map(f => findRow(f)))) : '',
+    rs.length ? section(`Recipes<span class="count">${rs.length}</span>`, '', listOf(rs.map(r => recipeRow(r)))) : '',
   ].join('');
 }
 
@@ -894,7 +967,7 @@ function viewSystem(id, X) {
       ${s.region ? `<p class="hero-sub">${esc(s.region)}</p>` : ''}
       ${heroActions('system', s)}</section>`,
     s.glyphs ? section('Portal address', '', `<div class="stack">${glyphStrip(s.glyphs)}<div class="glyph-code"><span class="mono">${esc(groupGlyphs(s.glyphs))}</span><button class="link-btn" data-act="copy" data-text="${esc(s.glyphs)}">Copy code</button></div></div>`) : '',
-    statsBlock([['Spectral class', s.starClass, 'mono'], ['Lifeform', s.lifeform], ['Economy', withTier(ECON_GROUPS, s.economy)], ['Wealth', labelOf(WEALTH, s.wealth)], ['Conflict', labelOf(CONFLICT, s.conflict)]]),
+    statsBlock([['Spectral class', s.starClass, 'mono'], ['Lifeform', s.lifeform], ['Economy', withTier(ECON_GROUPS, s.economy)], ['Wealth', labelOf(WEALTH, s.wealth)], ['Trade prices', tradeMods(s)], ['Conflict', labelOf(CONFLICT, s.conflict)]]),
     notesBlock(s.notes),
     photosBlock(s.photos),
     section(`Planets & moons<span class="count">${planets.length}</span>`, isMine(s) ? newLink('planet', 'Add', { system: id }) : '', planets.length ? listOf(planets.map(p => planetRow(p, false))) : '<p class="muted-note">No planets logged in this system yet.</p>'),
@@ -995,8 +1068,8 @@ const fmtLy = ly => `About ${(ly < 1000 ? Math.round(ly / 10) * 10 : Math.round(
 function hereInfo() {
   const h = S.here; if (!h) return null;
   const s = h.systemId && S.systems.get(h.systemId);
-  if (s) return { systemId: s.id, name: s.name || 'Unnamed system', glyphs: s.glyphs || '', galaxy: s.galaxy || '', region: s.region || '', star: s.starColor || '' };
-  return { systemId: '', name: h.name || 'A system not in your log', glyphs: h.glyphs || '', galaxy: h.galaxy || '', region: '', star: h.star || '' };
+  if (s) return { systemId: s.id, name: s.name || 'Unnamed system', glyphs: s.glyphs || '', galaxy: s.galaxy || '', region: s.region || '', star: s.starColor || '', economy: econType(s), wealth: s.wealth || '', buyMod: s.buyMod };
+  return { systemId: '', name: h.name || 'A system not in your log', glyphs: h.glyphs || '', galaxy: h.galaxy || '', region: '', star: h.star || '', economy: tierOf(ECON_GROUPS, h.economy), wealth: '', buyMod: null };
 }
 // rank: 0 this system, 1 same region, 2 measured, 3 no address, 4 another galaxy, 5 unknown system
 function distanceFrom(here, sys) {
@@ -1023,14 +1096,22 @@ function resourceIndex() {
   return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
 }
 
+// The "Where you are" card at the top of the resource finder and trade routes
+function hereSection(forTrade) {
+  const here = hereInfo();
+  const measured = !!(here && regionOf(here.glyphs));
+  const what = forTrade && here ? [here.economy || 'Economy not noted', wealthShort(here.wealth)] : [here && here.galaxy, here && (here.region || (here.glyphs ? groupGlyphs(here.glyphs) : ''))];
+  const card = here
+    ? `<div class="here">${starDot(here.star)}<div><b>${esc(here.name)}</b><small>${esc(what.filter(Boolean).join(' · ') || 'No galaxy or portal address')}</small></div><button class="btn btn-sm" data-act="here-set">Change</button></div>${measured ? '' : `<p class="hint">This system has no portal address in your log, so distances can’t be worked out. Add its glyphs to see how far away other ${forTrade ? 'systems' : 'planets'} are.</p>`}`
+    : `<div class="here">${kindTile('poi')}<div><b>Not set</b><small>${forTrade ? 'Tell the app to plan a route from here' : 'Tell the app, and the closest planets show first'}</small></div><button class="btn btn-sm btn-primary" data-act="here-set">Set</button></div>`;
+  return section('Where you are', here ? '<button class="link-btn" data-act="here-clear">Clear</button>' : '', card);
+}
+
 function viewResources() {
   const g = gate(); if (g) return g;
   const here = hereInfo(), idx = resourceIndex(), out = [];
   const measured = !!(here && regionOf(here.glyphs));
-  const card = here
-    ? `<div class="here">${starDot(here.star)}<div><b>${esc(here.name)}</b><small>${esc([here.galaxy, here.region || (here.glyphs ? groupGlyphs(here.glyphs) : '')].filter(Boolean).join(' · ') || 'No galaxy or portal address')}</small></div><button class="btn btn-sm" data-act="here-set">Change</button></div>${measured ? '' : '<p class="hint">This system has no portal address in your log, so distances can’t be worked out. Add its glyphs to see how far away other planets are.</p>'}`
-    : `<div class="here">${kindTile('poi')}<div><b>Not set</b><small>Tell the app, and the closest planets show first</small></div><button class="btn btn-sm btn-primary" data-act="here-set">Set</button></div>`;
-  out.push(section('Where you are', here ? '<button class="link-btn" data-act="here-clear">Clear</button>' : '', card));
+  out.push(hereSection(false));
   if (!idx.length) {
     out.push(emptyState('No resources logged yet', 'Add the resources you find to your planets, and this page shows where to get each one.', ''));
     return out.join('');
@@ -1053,7 +1134,7 @@ const hereFromSystem = s => ({ systemId: s.id, name: s.name || '', glyphs: s.gly
 function cleanHere(h) {
   if (!h || typeof h !== 'object') return null;
   const str = (v, n) => typeof v === 'string' ? v.slice(0, n) : '';
-  return { systemId: str(h.systemId, 200), name: str(h.name, 200), glyphs: str(h.glyphs, 12).toUpperCase().replace(/[^0-9A-F]/g, ''), galaxy: str(h.galaxy, 60), star: str(h.star, 20) };
+  return { systemId: str(h.systemId, 200), name: str(h.name, 200), glyphs: str(h.glyphs, 12).toUpperCase().replace(/[^0-9A-F]/g, ''), galaxy: str(h.galaxy, 60), star: str(h.star, 20), economy: str(h.economy, 60) };
 }
 function setHere(h) {
   S.here = h;
@@ -1068,9 +1149,9 @@ function toggleHere(id) {
 function openHere() {
   if (S.status !== 'ready') return;
   const h = S.here, rs = recentSystem();
-  const draft = { systemId: '', galaxy: (h && h.galaxy) || (rs && rs.galaxy) || 'Euclid', glyphs: '' };
+  const draft = { systemId: '', galaxy: (h && h.galaxy) || (rs && rs.galaxy) || 'Euclid', glyphs: '', economy: '' };
   if (h && h.systemId && S.systems.has(h.systemId)) draft.systemId = h.systemId;
-  else if (h) draft.glyphs = h.glyphs || '';
+  else if (h) { draft.glyphs = h.glyphs || ''; draft.economy = h.economy || ''; }
   else if (rs) draft.systemId = rs.id;   // probably where you are: the last system you logged
   const form = { kind: 'here', id: null, draft, uploads: [], removed: [], uploading: 0, confirmDelete: false, error: '', saving: false };
   openSheet({ title: 'Where are you?', tall: true, form, render: () => renderForm(form), onSave: () => saveHere(form) });
@@ -1082,11 +1163,150 @@ function saveHere(form) {
   else {
     const g = String(d.glyphs || '').toUpperCase().replace(/[^0-9A-F]/g, '');
     if (g.length !== 12) { form.error = 'Enter all 12 portal glyphs, or pick a system from your log.'; refreshSheet(); $('#sheet-body').scrollTop = 0; return; }
-    h = { systemId: '', name: '', glyphs: g, galaxy: String(d.galaxy || '').trim().slice(0, 60), star: '' };
+    h = { systemId: '', name: '', glyphs: g, galaxy: String(d.galaxy || '').trim().slice(0, 60), star: '', economy: String(d.economy || '').trim().slice(0, 60) };
   }
   closeSheet();
   setHere(h);
   toast('Location set');
+}
+
+/* ---------- Trade routes ---------- */
+const econType = s => s ? tierOf(ECON_GROUPS, s.economy) : '';
+const isTradeEcon = e => Object.prototype.hasOwnProperty.call(TRADE_DEMAND, e);
+const wealthShort = w => ({ '1': '★', '2': '★★', '3': '★★★', pirate: 'Pirate', none: 'No economy' }[w] || '');
+const fmtPct = n => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}%`;
+const tradeMods = s => [Number.isFinite(s.buyMod) ? `${fmtPct(s.buyMod)} to buy` : '', Number.isFinite(s.sellMod) ? `${fmtPct(s.sellMod)} to sell` : ''].filter(Boolean).join(' · ');
+const isPirate = s => s.wealth === 'pirate' || norm(s.economy) === 'black market';
+// Logged systems (yours and your crew's) with this economy, best place to sell first:
+// same galaxy, then the highest sell price you noted, then the closest
+function marketsFor(econ, from) {
+  const sell = s => Number.isFinite(s.sellMod) ? s.sellMod : -1;
+  return all('systems').filter(s => econType(s) === econ).map(s => ({ s, d: from ? distanceFrom(from, s) : null }))
+    .sort((a, b) => ((a.d && a.d.rank === 4) - (b.d && b.d.rank === 4)) || (sell(b.s) - sell(a.s))
+      || ((a.d ? a.d.rank : 9) - (b.d ? b.d.rank : 9)) || (((a.d && a.d.dist) || 0) - ((b.d && b.d.dist) || 0)) || byName(a.s, b.s));
+}
+const marketRow = ({ s, d }) => systemRow(s, null, '', [Number.isFinite(s.sellMod) ? `${fmtPct(s.sellMod)} sell` : 'Sell price not noted', d && d.label, wealthShort(s.wealth)].filter(Boolean).join(' · '));
+function noMarket(econ) {
+  const ws = (ECONOMY_WORDS.find(x => x[0] === econ) || [, []])[1];
+  return `<p class="muted-note">No ${esc(econ)} system in your log yet. On the Galaxy Map, look for ${esc(ws.join(', '))}. With the Economy Scanner, the map’s economy filter shows them ${esc(ECON_COLOUR[econ])}.</p>`;
+}
+// What a market sells, by the system's wealth (from the wiki's Marketed tradeables)
+function onSale(econ, wealth) {
+  const g = goodsOf(econ);
+  if (wealth === 'pirate') return 'Pirate systems don’t sell trade goods, only smuggled goods.';
+  if (wealth === '3') return `All five are on sale: ${g.join(', ')}.`;
+  if (wealth === '2') return `Usually ${g.slice(2).join(', ')}, and sometimes ${g[1]}. Only ★★★ systems sell ${g[0]}, the one worth most.`;
+  if (wealth === '1') return `Mostly ${g[4]}, sometimes ${g[3]}. Weak economies sell little, so a ★★★ system pays far better.`;
+  return `Up to five, depending on wealth: ${g.join(', ')}. ★★★ systems sell them all.`;
+}
+function loopOf(econ) { const out = [econ]; let e = TRADE_DEMAND[econ]; while (e && e !== econ) { out.push(e); e = TRADE_DEMAND[e]; } return out; }
+const step = (n, title, small, body) => `<div class="step"><div class="step-head"><span class="step-n">${n}</span><div><b>${esc(title)}</b><small>${small}</small></div></div>${body}</div>`;
+
+// From the economy you're in, around its loop, picking the best logged system for each stop
+function routeSection(here) {
+  if (!here) return '';
+  const e0 = here.economy;
+  if (!isTradeEcon(e0)) {
+    const s = here.systemId && S.systems.get(here.systemId);
+    const how = s && isMine(s) ? 'Add this system’s economy in Edit, from the Galaxy Map,' : s ? 'This system’s economy isn’t noted. Pick another system' : 'Tap Change and add this system’s economy';
+    return section('Trade route from here', '', `<p class="muted-note">${how} to plan a route from here.</p>`);
+  }
+  const loop = loopOf(e0), steps = [];
+  const prices = Number.isFinite(here.buyMod) ? ` Prices here are ${fmtPct(here.buyMod)}; the best is −30%.` : '';
+  steps.push(step(1, `Buy ${e0} goods here`, esc(onSale(e0, here.wealth) + prices), ''));
+  let from = here;
+  for (let i = 1; i <= loop.length; i++) {
+    const econ = loop[i % loop.length], carrying = loop[i - 1], last = i === loop.length;
+    const best = marketsFor(econ, from)[0];
+    const small = last ? `Sell the ${carrying} goods, then the loop starts again.` : `${carrying} goods sell for the most there. Then buy its ${econ} goods.`;
+    steps.push(step(i + 1, last ? `Back to ${econ}` : `Sell at ${econ}`, esc(small), best ? listOf([marketRow(best)]) : noMarket(econ)));
+    if (best) from = Object.assign(hereFromSystem(best.s), { economy: econ });
+  }
+  return section('Trade route from here', '', `<div class="steps">${steps.join('')}</div><p class="hint">Each stop is the best system of that economy in your log. Distances are from the stop before.</p>`);
+}
+
+const goodChip = g => `<button class="chip" data-act="good" data-good="${esc(g)}" aria-pressed="${S.goods.has(g)}">${esc(g)}</button>`;
+function goodsSection(here) {
+  const sel = S.goods;
+  const box = `<div class="chip-box" data-scroll-key="goods">${TRADE_GOODS.map(([econ, gs]) => `<h4 class="guide-sub">${esc(econ)}</h4><div class="chips small">${gs.map(goodChip).join('')}</div>`).join('')}<h4 class="guide-sub">Smuggled goods</h4><div class="chips small">${SMUGGLED.map(([g]) => goodChip(g)).join('')}</div></div>`;
+  const out = [section(`What are you carrying?${sel.size ? `<span class="count">${sel.size}</span>` : ''}`, sel.size ? '<button class="link-btn" data-act="goods-clear">Clear</button>' : '', box)];
+  if (!sel.size) { out.push('<p class="muted-note">Tap the trade goods in your cargo to see where they sell for the most.</p>'); return out.join(''); }
+  // What you picked, grouped by the economy that pays most for it
+  const groups = new Map();
+  for (const g of sel) {
+    const info = GOODS.get(g); if (!info) continue;
+    const target = info.econ ? TRADE_DEMAND[info.econ] : '';
+    if (!groups.has(target)) groups.set(target, []);
+    groups.get(target).push(g);
+  }
+  for (const [target, gs] of groups) {
+    gs.sort((a, b) => GOODS.get(b).value - GOODS.get(a).value);
+    const names = gs.map(g => `${g} (about ${GOODS.get(g).value.toLocaleString()} each)`).join(', ');
+    if (!target) {
+      const spots = all('systems').filter(s => !isPirate(s)).map(s => ({ s, d: here ? distanceFrom(here, s) : null }))
+        .sort((a, b) => ((a.d ? a.d.rank : 9) - (b.d ? b.d.rank : 9)) || (((a.d && a.d.dist) || 0) - ((b.d && b.d.dist) || 0)) || byName(a.s, b.s)).slice(0, 3);
+      out.push(section('Sell smuggled goods', '', `<p class="meta">${esc(names)}. Any system that isn’t pirate-controlled buys them. Watch for cargo scans on the way in.</p>${spots.length ? listOf(spots.map(({ s, d }) => systemRow(s, null, '', [d && d.label, econType(s) || s.economy, wealthShort(s.wealth)].filter(Boolean).join(' · ') || s.galaxy || 'Any system'))) : ''}`));
+      continue;
+    }
+    const m = marketsFor(target, here);
+    out.push(section(`Sell at ${esc(target)}`, '', `<p class="meta">${esc(names)}</p>${m.length ? listOf(m.slice(0, 3).map(marketRow)) + (m.length > 3 ? `<p class="meta">And ${m.length - 3} more ${esc(target)} systems in your log.</p>` : '') : noMarket(target)}`));
+  }
+  return out.join('');
+}
+
+function viewTrade() {
+  const g = gate(); if (g) return g;
+  const here = hereInfo();
+  return [
+    hereSection(true),
+    routeSection(here),
+    goodsSection(here),
+    '<p class="hint">Trade outposts on planets pay more than space stations. Prices go up to +80% to sell and down to −30% to buy. Note both from the Galaxy Map when you log a system, and this page picks the best places for you.</p>',
+  ].join('');
+}
+let goodsT = 0;
+function toggleGood(g) {
+  if (!GOODS.has(g)) return;
+  if (S.goods.has(g)) S.goods.delete(g); else S.goods.add(g);
+  render();
+  clearTimeout(goodsT);
+  goodsT = setTimeout(() => { store.put('meta', 'trade-goods', [...S.goods]).catch(() => {}); }, 300);
+}
+
+/* ---------- Recipe book ---------- */
+// Dish and ingredient names already in the book, as suggestions while typing
+function recipeWords() {
+  const m = new Map();
+  for (const r of S.recipes.values()) for (const w of [r.name, ...(Array.isArray(r.ingredients) ? r.ingredients : [])]) { const k = norm(w); if (k && !m.has(k)) m.set(k, String(w).trim()); }
+  return [...m.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+function viewRecipes() {
+  const g = gate(); if (g) return g;
+  const items = all('recipes');
+  if (!items.length) return emptyState('No recipes yet', `Write down what you cook in the Nutrient Processor: what goes in and what comes out.${crew.code ? ' Your crew sees your recipes, and you see theirs.' : ''}`, S.canWrite ? newBtn('recipe', 'Add a recipe') : '');
+  const q = norm(S.filters.recipes);
+  const list = items.filter(r => !q || rcHay(r).includes(q)).sort(byName);
+  return `<div class="stack"><div class="list-bar"><span class="count">${plural(list.length, 'recipe')}${crew.code ? ' · yours and your crew’s' : ''}</span>${S.canWrite ? newLink('recipe', 'Add') : ''}</div>${list.length ? listOf(list.map(r => recipeRow(r))) : noMatch(S.filters.recipes.trim())}</div>`;
+}
+function viewRecipe(id) {
+  const r = S.recipes.get(id); if (!r) return missing();
+  const ing = (Array.isArray(r.ingredients) ? r.ingredients : []).filter(Boolean);
+  // An ingredient that's a dish in the book links to its own recipe
+  const named = new Map(all('recipes').map(x => [norm(x.name), x]));
+  const tags = ing.map(i => { const x = named.get(norm(i)); return x && x.id !== id ? `<button class="tag tag-link" data-act="open" data-type="recipe" data-id="${esc(x.id)}">${esc(i)}</button>` : `<span class="tag">${esc(i)}</span>`; }).join('<span class="plus" aria-hidden="true">+</span>');
+  const usedIn = all('recipes').filter(x => x.id !== id && (Array.isArray(x.ingredients) ? x.ingredients : []).some(i => norm(i) === norm(r.name))).sort(byName);
+  return [
+    `<section class="hero"><span class="kind-tile xl" aria-hidden="true">${icon('recipe')}</span>
+      <p class="eyebrow">Recipe${ing.length ? ' · ' + plural(ing.length, 'ingredient') : ''}</p>
+      <h2>${esc(r.name || 'Unnamed recipe')}</h2>
+      ${heroActions('recipe', r)}</section>`,
+    section('Ingredients', '', ing.length ? `<div class="tags">${tags}</div>` : '<p class="muted-note">No ingredients noted.</p>'),
+    statsBlock([['Sells for', Number.isFinite(r.value) ? `${r.value.toLocaleString()} units` : '']]),
+    notesBlock(r.notes),
+    photosBlock(r.photos),
+    usedIn.length ? section(`Used in<span class="count">${usedIn.length}</span>`, '', listOf(usedIn.map(x => recipeRow(x)))) : '',
+    metaLine(r),
+  ].join('');
 }
 
 /* ---------- Sheets ---------- */
@@ -1130,6 +1350,8 @@ const SPECS = {
     { k: 'lifeform', t: 'chips', label: 'Dominant lifeform', options: LIFEFORMS },
     { row: [ { k: 'economy', t: 'words', label: 'Economy', groups: ECON_GROUPS }, { k: 'conflict', t: 'select', label: 'Conflict', options: CONFLICT } ] },
     { k: 'wealth', t: 'select', label: 'Wealth', options: WEALTH },
+    { row: [ { k: 'buyMod', t: 'pct', label: 'Buy price', sign: '−', placeholder: '23.5' }, { k: 'sellMod', t: 'pct', label: 'Sell price', sign: '+', placeholder: '72.4' } ],
+      hint: 'The two percentages the Galaxy Map shows for this system. Trade routes use them to find the best prices.' },
     { k: 'econGuide', t: 'econGuide' },
     { k: 'glyphs', t: 'glyphs', label: 'Portal address' },
     { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Station traders, pirates, anything worth remembering' },
@@ -1160,12 +1382,20 @@ const SPECS = {
     { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Price, behaviour, what it drops, how to get there' },
     { k: 'photos', t: 'photos', label: 'Screenshots' },
   ] },
-  // Not saved in the log: just where you are right now, for the resource finder
+  recipe: { coll: 'recipes', noun: 'recipe', fields: [
+    { k: 'name', t: 'text', label: 'What it makes', required: true, placeholder: 'The dish the Nutrient Processor gives you', listFn: () => recipeWords() },
+    { k: 'ingredients', t: 'ingredients', label: 'Ingredients', hint: 'Up to three, as they go into the Nutrient Processor.' },
+    { k: 'value', t: 'text', label: 'Sells for (units)', mono: true, inputmode: 'numeric', placeholder: '25000' },
+    { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Where to get the ingredients, what it’s good for' },
+    { k: 'photos', t: 'photos', label: 'Screenshots' },
+  ] },
+  // Not saved in the log: just where you are right now, for the resource finder and trade routes
   here: { noun: 'location', fields: [
     { k: 'intro', t: 'note', text: 'Pick the system you’re in from your log, or enter the portal address of any planet in it.' },
     { k: 'systemId', t: 'hereSystem', label: 'Star system' },
     { k: 'galaxy', t: 'text', label: 'Galaxy', list: GALAXIES, showIf: d => !d.systemId },
     { k: 'glyphs', t: 'glyphs', label: 'Portal address', showIf: d => !d.systemId },
+    { k: 'economy', t: 'words', label: 'Economy', groups: ECON_GROUPS, hint: 'For trade routes. The Galaxy Map shows it.', showIf: d => !d.systemId },
   ] },
 };
 const flatFields = spec => spec.fields.flatMap(f => f.row || [f]);
@@ -1179,7 +1409,8 @@ function blankDraft(kind, ctx) {
   // New planets and finds go in the system you said you're in, if it's yours
   if (!systemId && S.here && isMine(S.systems.get(S.here.systemId))) systemId = S.here.systemId;
   if (!systemId && rs) systemId = rs.id;
-  if (kind === 'system') return { name: '', galaxy: rs ? rs.galaxy || 'Euclid' : 'Euclid', region: '', starColor: '', starClass: '', lifeform: '', economy: '', wealth: '', conflict: '', glyphs: '', notes: '', photos: [], favorite: false };
+  if (kind === 'system') return { name: '', galaxy: rs ? rs.galaxy || 'Euclid' : 'Euclid', region: '', starColor: '', starClass: '', lifeform: '', economy: '', wealth: '', buyMod: '', sellMod: '', conflict: '', glyphs: '', notes: '', photos: [], favorite: false };
+  if (kind === 'recipe') return { name: '', ingredients: [], value: '', notes: '', photos: [], favorite: false };
   if (kind === 'planet') return { systemId, name: '', body: 'Planet', biome: '', description: '', weather: '', sentinels: '', flora: '', fauna: '', faunaFound: '', faunaTotal: '', resources: [], notes: '', photos: [], favorite: false };
   return { kind: ctx.kind || 'creature', name: '', systemId, planetId: ctx.planetId || '', cls: '', subtype: '', coords: '', notes: '', photos: [], favorite: false };
 }
@@ -1190,12 +1421,14 @@ function openForm(kind, existing, ctx) {
   delete draft.id;
   if (!Array.isArray(draft.photos)) draft.photos = [];
   if (kind === 'planet' && !Array.isArray(draft.resources)) draft.resources = [];
+  if (kind === 'recipe' && !Array.isArray(draft.ingredients)) draft.ingredients = [];
   const form = { kind, id: existing ? existing.id : null, draft, uploads: [], removed: [], uploading: 0, confirmDelete: false, error: '', saving: false };
   openSheet({ title: `${existing ? 'Edit' : 'New'} ${spec.noun}`, tall: true, form, render: () => renderForm(form), onSave: () => submitForm(form), onCancel: () => discardUploads(form) });
 }
 function openNew(kind, ctx) {
   if (!S.canWrite || S.status !== 'ready') return;
-  if (kind !== 'system' && !(ctx && ctx.kind === 'fleet') && !mineOf('systems').length) kind = 'system';
+  // Planets and finds need a system to go in (recipes and your freighter's ships don't)
+  if ((kind === 'planet' || (kind === 'find' && !(ctx && ctx.kind === 'fleet'))) && !mineOf('systems').length) kind = 'system';
   // New entries only go inside your own systems and planets, never a crewmate's
   ctx = Object.assign({}, ctx);
   if (ctx.systemId && !isMine(S.systems.get(ctx.systemId))) ctx.systemId = '';
@@ -1217,7 +1450,11 @@ function renderForm(form) {
 
 function renderField(f, form) {
   const d = form.draft;
-  if (f.row) { const inner = f.row.filter(x => !x.showIf || x.showIf(d)).map(x => renderField(x, form)).join(''); return inner ? `<div class="row2">${inner}</div>` : ''; }
+  if (f.row) {
+    const inner = f.row.filter(x => !x.showIf || x.showIf(d)).map(x => renderField(x, form)).join('');
+    if (!inner) return '';
+    return f.hint ? `<div class="field"><div class="row2">${inner}</div><span class="hint">${esc(f.hint)}</span></div>` : `<div class="row2">${inner}</div>`;
+  }
   if (f.showIf && !f.showIf(d)) return '';
   const id = 'f-' + f.k;
   const lbl = (forId) => `<span class="lbl"${forId ? ` id="${forId}"` : ''}>${esc(f.label)}${f.required ? '<i class="req">required</i>' : ''}</span>`;
@@ -1226,10 +1463,19 @@ function renderField(f, form) {
     case 'text': {
       const list = f.list || (f.listFn ? f.listFn(d) : null);
       const lid = list && list.length ? `dl-${f.k}-${d.kind || 'x'}` : '';
-      return `<label class="field" for="${id}">${lbl()}<input class="input${f.mono ? ' mono' : ''}" id="${id}" data-k="${f.k}" value="${esc(val(d[f.k]))}" placeholder="${esc(f.placeholder || '')}"${lid ? ` list="${lid}"` : ''} autocomplete="off" ${f.mono ? 'spellcheck="false" autocapitalize="off"' : 'autocapitalize="words"'}>${lid ? `<datalist id="${lid}">${list.map(o => `<option value="${esc(o)}"></option>`).join('')}</datalist>` : ''}${hint}</label>`;
+      return `<label class="field" for="${id}">${lbl()}<input class="input${f.mono ? ' mono' : ''}" id="${id}" data-k="${f.k}" value="${esc(val(d[f.k]))}" placeholder="${esc(f.placeholder || '')}"${lid ? ` list="${lid}"` : ''}${f.inputmode ? ` inputmode="${f.inputmode}"` : ''} autocomplete="off" ${f.mono ? 'spellcheck="false" autocapitalize="off"' : 'autocapitalize="words"'}>${lid ? `<datalist id="${lid}">${list.map(o => `<option value="${esc(o)}"></option>`).join('')}</datalist>` : ''}${hint}</label>`;
     }
     case 'note':
       return `<p class="muted-note">${esc(f.text)}</p>`;
+    case 'pct': {
+      // Typed without the sign (phone number pads have no minus key); the sign is shown beside the box
+      const v = d[f.k], shown = typeof v === 'number' ? String(Math.abs(v)) : val(v);
+      return `<label class="field" for="${id}">${lbl()}<span class="pct"><span aria-hidden="true">${f.sign}</span><input class="input mono" id="${id}" data-k="${f.k}" value="${esc(shown)}" placeholder="${esc(f.placeholder || '')}" inputmode="decimal" autocomplete="off" aria-label="${esc(f.label)}, ${f.sign === '+' ? 'plus' : 'minus'} percent"><span aria-hidden="true">%</span></span>${hint}</label>`;
+    }
+    case 'ingredients': {
+      const ing = Array.isArray(d.ingredients) ? d.ingredients : [];
+      return `<div class="field" role="group" aria-labelledby="${id}-l">${lbl(id + '-l')}<div class="stack">${[0, 1, 2].map(i => `<input class="input" id="f-ing-${i}" data-ing="${i}" value="${esc(val(ing[i]))}" placeholder="${i ? 'And (optional)' : 'First ingredient'}" list="dl-ingredients" autocomplete="off" autocapitalize="words" aria-label="Ingredient ${i + 1}">`).join('')}</div><datalist id="dl-ingredients">${recipeWords().map(o => `<option value="${esc(o)}"></option>`).join('')}</datalist>${hint}</div>`;
+    }
     case 'hereSystem': {
       const mine = mineOf('systems').sort(byName), theirs = all('systems').filter(s => s._crew).sort(byName);
       const opt = s => `<option value="${esc(s.id)}"${s.id === d[f.k] ? ' selected' : ''}>${esc(s.name || 'Unnamed system')}</option>`;
@@ -1363,7 +1609,18 @@ function normalize(kind, d) {
   const o = {};
   for (const [k, v] of Object.entries(d)) o[k] = typeof v === 'string' ? v.trim() : v;
   const toNum = v => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : null; };
-  if (kind === 'system') o.glyphs = String(o.glyphs || '').toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
+  if (kind === 'system') {
+    o.glyphs = String(o.glyphs || '').toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
+    // Buy prices are below average and sell prices above, whatever sign was typed
+    const pct = v => { const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.min(100, Math.round(n * 10) / 10) : null; };
+    const b = pct(o.buyMod), s = pct(o.sellMod);
+    o.buyMod = b == null ? null : -b; o.sellMod = s;
+  }
+  if (kind === 'recipe') {
+    o.ingredients = (Array.isArray(o.ingredients) ? o.ingredients : []).map(x => String(x || '').trim().replace(/\s+/g, ' ').slice(0, 80)).filter(Boolean).slice(0, 3);
+    const n = parseInt(String(o.value == null ? '' : o.value).replace(/[^0-9]/g, ''), 10);
+    o.value = Number.isFinite(n) ? n : null;
+  }
   if (kind === 'planet') { o.faunaFound = toNum(o.faunaFound); o.faunaTotal = toNum(o.faunaTotal); o.resources = (o.resources || []).filter(Boolean); }
   if (kind === 'find') {
     if (!['ship', 'tool', 'fleet'].includes(o.kind)) o.cls = '';
@@ -1380,7 +1637,7 @@ async function submitForm(form) {
   const fail = msg => { form.error = msg; refreshSheet(); const b = $('#sheet-body'); if (b) b.scrollTop = 0; };
   if (form.uploading) return fail('Screenshots are still being added. Save again in a moment.');
   if (!String(d.name || '').trim()) return fail(`Give the ${spec.noun} a name.`);
-  const needsSystem = form.kind !== 'system' && !(form.kind === 'find' && d.kind === 'fleet');
+  const needsSystem = form.kind === 'planet' || (form.kind === 'find' && d.kind !== 'fleet');
   if (needsSystem && !isMine(S.systems.get(d.systemId))) return fail('Pick the star system it belongs to.');
   if (form.kind === 'find' && d.planetId && !isMine(S.planets.get(d.planetId))) d.planetId = '';
   const body = normalize(form.kind, d);
@@ -1536,6 +1793,7 @@ function openAdd() {
       <button type="button" class="choice" data-sheet-act="new-planet"${none ? ' disabled' : ''}>${planetDisc({ biome: 'Lush' })}<span><b>Planet or moon</b><small>${sys ? 'In ' + esc(sys.name) : 'Biome, weather, sentinels, resources'}</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-find"${none ? ' disabled' : ''}>${kindTile('creature')}<span><b>Find</b><small>${pl ? 'On ' + esc(pl.name) : sys ? 'In ' + esc(sys.name) : 'Creature, plant, starship, multi-tool, base…'}</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-fleet">${kindTile('fleet')}<span><b>Ship for my freighter</b><small>A starship or corvette you own</small></span></button>
+      <button type="button" class="choice" data-sheet-act="new-recipe"><span class="kind-tile" aria-hidden="true">${icon('recipe')}</span><span><b>Recipe</b><small>${crew.code ? 'A dish for the crew’s recipe book' : 'A dish for your recipe book'}</small></span></button>
     </div>${none ? '<p class="muted-note">Planets and finds belong to a star system, so log a system first.</p>' : ''}`;
   } });
 }
@@ -1564,7 +1822,7 @@ function renderSettings() {
       : `<button type="button" class="btn" data-sheet-act="export"${st.busy ? ' disabled' : ''}>${st.busy === 'export' ? 'Making backup…' : 'Make backup file'}</button>`}</section>`);
     const r = st.restore;
     out.push(`<section class="set"><h3>Restore</h3>${r
-      ? `<p>This file has ${plural(r.systems.length, 'system')}, ${plural(r.planets.length, 'planet')}, ${plural(r.finds.length, 'find')} and ${plural(r.photoCount, 'screenshot')}. Entries already in your log with the same ID are replaced. Nothing gets deleted.</p><div class="confirm-actions"><button type="button" class="btn btn-primary" data-sheet-act="restore-go"${st.busy ? ' disabled' : ''}>${st.busy === 'restore' ? 'Restoring…' : 'Restore'}</button><button type="button" class="btn" data-sheet-act="restore-cancel">Cancel</button></div>`
+      ? `<p>This file has ${plural(r.systems.length, 'system')}, ${plural(r.planets.length, 'planet')}, ${plural(r.finds.length, 'find')}${r.recipes.length ? `, ${plural(r.recipes.length, 'recipe')}` : ''} and ${plural(r.photoCount, 'screenshot')}. Entries already in your log with the same ID are replaced. Nothing gets deleted.</p><div class="confirm-actions"><button type="button" class="btn btn-primary" data-sheet-act="restore-go"${st.busy ? ' disabled' : ''}>${st.busy === 'restore' ? 'Restoring…' : 'Restore'}</button><button type="button" class="btn" data-sheet-act="restore-cancel">Cancel</button></div>`
       : `<p>Load a backup file you saved earlier. Backups from the claude.ai version of this log work too, without their screenshots.</p><label class="btn">Choose backup file<input type="file" id="restore-in" class="vh"></label>`}</section>`);
   }
   if (!isStandalone()) out.push(`<section class="set"><h3>Install as an app</h3><p>${installText()}</p>${installEvt ? `<button type="button" class="btn btn-primary" data-sheet-act="install">Install</button>` : ''}</section>`);
@@ -1588,7 +1846,7 @@ async function makeBackup() {
   if (S.settings.busy) return;
   S.settings.busy = 'export'; S.settings.msg = ''; refreshSheet();
   try {
-    const colls = { systems: mineOf('systems'), planets: mineOf('planets'), finds: mineOf('finds') };
+    const colls = { systems: mineOf('systems'), planets: mineOf('planets'), finds: mineOf('finds'), recipes: mineOf('recipes') };
     const ids = new Set();
     for (const c in colls) for (const x of colls[c]) for (const id of (x.photos || [])) if (validAssetId(id)) ids.add(id);
     const head = JSON.stringify(Object.assign({ app: 'travellers-log', version: 2, exportedAt: new Date().toISOString() }, colls));
@@ -1601,7 +1859,7 @@ async function makeBackup() {
       n++;
     }
     parts.push('}}');
-    S.settings.backup = { blob: new Blob(parts, { type: 'application/json' }), entries: colls.systems.length + colls.planets.length + colls.finds.length, photos: n, name: `travellers-log-${new Date().toISOString().slice(0, 10)}.json` };
+    S.settings.backup = { blob: new Blob(parts, { type: 'application/json' }), entries: colls.systems.length + colls.planets.length + colls.finds.length + colls.recipes.length, photos: n, name: `travellers-log-${new Date().toISOString().slice(0, 10)}.json` };
   } catch (e) {
     toast('Couldn’t make the backup file. Try again.');
   }
@@ -1635,7 +1893,7 @@ async function loadRestore(file) {
     if (j.photos && typeof j.photos === 'object') {
       for (const [id, d] of Object.entries(j.photos)) if (validAssetId(id) && typeof d === 'string' && /^data:image\/(jpeg|png|webp|gif);base64,/.test(d)) photos[id] = d;
     }
-    S.settings.restore = { systems: j.systems.filter(okId), planets: j.planets.filter(okId), finds: j.finds.filter(okId), photos, photoCount: Object.keys(photos).length };
+    S.settings.restore = { systems: j.systems.filter(okId), planets: j.planets.filter(okId), finds: j.finds.filter(okId), recipes: Array.isArray(j.recipes) ? j.recipes.filter(okId) : [], photos, photoCount: Object.keys(photos).length };
     S.settings.msg = '';
   } catch (e) {
     S.settings.restore = null; S.settings.msg = '';
@@ -1657,7 +1915,7 @@ async function doRestore() {
       photoUrls.delete(id); have.add(id); shots++;
     } catch (e) { failed++; }
   }
-  for (const [coll, items] of [['systems', r.systems], ['planets', r.planets], ['finds', r.finds]]) {
+  for (const [coll, items] of [['systems', r.systems], ['planets', r.planets], ['finds', r.finds], ['recipes', r.recipes]]) {
     for (const item of items) {
       const body = Object.assign({}, item); delete body.id;
       // Screenshots that aren't in the file or on this device would only show as empty tiles
@@ -1717,6 +1975,10 @@ document.addEventListener('click', e => {
     case 'sort': S.filters.sort[ds.list] = ds.sort; render(); break;
     case 'kind': S.filters.findKind = ds.kind; render(); break;
     case 'resources': go('resources'); break;
+    case 'trade': go('trade'); break;
+    case 'recipes': go('recipes'); break;
+    case 'good': toggleGood(ds.good); break;
+    case 'goods-clear': S.goods.clear(); store.put('meta', 'trade-goods', []).catch(() => {}); render(); break;
     case 'res': S.filters.resource = S.filters.resource === ds.res ? '' : ds.res; render(); break;
     case 'here-set': openHere(); break;
     case 'here-clear': setHere(null); toast('Location cleared'); break;
@@ -1765,6 +2027,7 @@ function onSheetClick(e) {
   }
   switch (ds.sheetAct) {
     case 'new-fleet': openNew('find', { kind: 'fleet' }); break;
+    case 'new-recipe': openNew('recipe', {}); break;
     case 'new-system': case 'new-planet': case 'new-find': {
       const ctx = (sheetState && sheetState.ctx) || {};
       openNew(ds.sheetAct.slice(4), ctx); break;
@@ -1830,6 +2093,12 @@ document.addEventListener('input', e => {
     return;
   }
   if (t.id === 'econ-guide-q') { form.econQ = t.value; updateEconGuide(form); return; }
+  if (t.dataset.ing != null) {
+    const a = Array.isArray(form.draft.ingredients) ? [...form.draft.ingredients] : [];
+    a[Number(t.dataset.ing)] = t.value;
+    form.draft.ingredients = Array.from(a, x => x || '');
+    return;
+  }
   if (t.matches('input[data-k], textarea[data-k]')) form.draft[t.dataset.k] = t.value;
   if (t.dataset.k === 'description') updateBiomeGuide(form);
 });
@@ -1908,18 +2177,21 @@ const SEED = {
 };
 
 /* ---------- Storage: everything is kept on this device, in IndexedDB ---------- */
-const STORES = ['systems', 'planets', 'finds', 'photos', 'meta'];
+const STORES = ['systems', 'planets', 'finds', 'recipes', 'photos', 'meta'];
 let idb = null, bc = null;
 const newId = () => { const a = new Uint8Array(12); crypto.getRandomValues(a); return Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); };
 
 function openIdb() {
   return new Promise((res, rej) => {
     if (!window.indexedDB) { rej(new Error('no indexedDB')); return; }
-    const req = indexedDB.open('travellers-log', 1);
+    // Version 2 added the recipe book. Upgrading only adds the new store; nothing else changes.
+    const req = indexedDB.open('travellers-log', 2);
+    let waitT = 0;
     req.onupgradeneeded = () => { for (const s of STORES) if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s); };
-    req.onsuccess = () => { const d = req.result; d.onversionchange = () => d.close(); res(d); };
-    req.onerror = () => rej(req.error);
-    req.onblocked = () => rej(new Error('blocked'));
+    req.onsuccess = () => { clearTimeout(waitT); const d = req.result; d.onversionchange = () => d.close(); res(d); };
+    req.onerror = () => { clearTimeout(waitT); rej(req.error); };
+    // An older copy of the app open in another window closes itself; give it a moment
+    req.onblocked = () => { waitT = setTimeout(() => rej(new Error('blocked')), 10000); };
   });
 }
 // Runs fn inside one transaction and resolves with what fn returned, once the transaction has committed
@@ -1962,7 +2234,7 @@ const localDb = {
 };
 
 async function loadAll() {
-  for (const coll of ['systems', 'planets', 'finds']) {
+  for (const coll of COLLS) {
     const rows = await store.entries(coll);
     S[coll] = new Map(rows.map(([id, v]) => [id, Object.assign({}, v, { id })]));
     S.loaded[coll] = true;
@@ -1990,7 +2262,8 @@ const FIREBASE_CONFIG = {
 };
 const FIREBASE_VER = '12.0.0';
 const CODE_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';   // no 0/O or 1/I to mix up
-const TYPE_OF = { systems: 'system', planets: 'planet', finds: 'find' };
+const TYPE_OF = { systems: 'system', planets: 'planet', finds: 'find', recipes: 'recipe' };
+const emptyItems = () => ({ systems: new Map(), planets: new Map(), finds: new Map(), recipes: new Map() });
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const crew = {
   fb: null, uid: '', code: '', name: '',
@@ -1998,7 +2271,7 @@ const crew = {
   error: '',
   members: new Map(),          // uid -> name
   docs: [],                    // everyone's shared entries, as stored online
-  items: { systems: new Map(), planets: new Map(), finds: new Map() },
+  items: emptyItems(),
   unsubs: [],
 };
 // Your own creature counts for crewmates' planets (planet id → count). Everyone counts what they found.
@@ -2014,7 +2287,7 @@ let crewSeen = null;           // { code, map } as of the last time the Log was 
 let crewBase = new Map();      // what "New from crew" counts as old: what you'd seen when you opened the app
 let crewSeenT = 0, hiddenAt = 0;
 // The crew's entries as the views show them (with your own creature counts)
-const crewEntries = () => ['systems', 'planets', 'finds'].flatMap(c => [...crew.items[c].values()].map(v => [TYPE_OF[c], S[c].get(v.id) || v]));
+const crewEntries = () => COLLS.flatMap(c => [...crew.items[c].values()].map(v => [TYPE_OF[c], S[c].get(v.id) || v]));
 const crewKeyOf = (t, v) => t + ':' + v.id;
 const crewStamp = v => String(v.updatedAt || v.createdAt || '-');
 const crewMap = () => new Map(crewEntries().map(([t, v]) => [crewKeyOf(t, v), crewStamp(v)]));
@@ -2156,7 +2429,7 @@ function cleanShared(data) {
   return o;
 }
 function buildCrewItems() {
-  const items = { systems: new Map(), planets: new Map(), finds: new Map() };
+  const items = emptyItems();
   for (const d of crew.docs) {
     if (!d || typeof d.owner !== 'string' || d.owner === crew.uid || typeof d.id !== 'string' || !hasOwn(COLL, d.type)) continue;
     const pre = d.owner + '~';
@@ -2174,7 +2447,7 @@ function buildCrewItems() {
 }
 // Your own entries plus the crew's, in the lists the views read from
 function applyCrew() {
-  for (const c of ['systems', 'planets', 'finds']) {
+  for (const c of COLLS) {
     const m = new Map();
     for (const [id, v] of S[c]) if (!v._crew) m.set(id, v);
     for (const [id, v] of crew.items[c]) m.set(id, v);
@@ -2209,7 +2482,7 @@ async function syncOwn() {
     const snap = await fs.getDocs(fs.query(fs.collection(db, 'crews', code, 'items'), fs.where('owner', '==', crew.uid)));
     const remote = new Map(snap.docs.map(d => [d.id, d.data()]));
     const writes = [];
-    for (const coll of ['systems', 'planets', 'finds']) {
+    for (const coll of COLLS) {
       const type = TYPE_OF[coll];
       for (const it of mineOf(coll)) {
         if (it.example || (coll === 'finds' && it.kind === 'fleet')) continue;
@@ -2292,7 +2565,7 @@ async function leaveCrew() {
   stopCrew();
   await saveCrew('', crew.name);
   crew.status = 'off'; crew.members = new Map(); crew.docs = [];
-  crew.items = { systems: new Map(), planets: new Map(), finds: new Map() };
+  crew.items = emptyItems();
   applyCrew();
   S.stack = S.stack.filter(routeAlive);
   S.settings = freshSettings({ msg: 'You left the crew. Your own log is still here.' });
@@ -2335,7 +2608,7 @@ function renderCrewSettings() {
 
 /* ---------- Updates ---------- */
 // Goes up by one with every release. The app compares it with the copy on the website.
-const APP_VERSION = '10';
+const APP_VERSION = '11';
 const INDEX_URL = new URL('./', location.href).href;
 let lastUpdateCheck = 0, freshIndex = null;
 // Resolves with the website's version number, or null when it couldn't check (offline)
@@ -2400,6 +2673,7 @@ async function boot() {
     await seedOnce();
     await loadAll();
     try { S.here = cleanHere(await store.get('meta', 'here')); } catch (e) {}
+    try { const tg = await store.get('meta', 'trade-goods'); if (Array.isArray(tg)) S.goods = new Set(tg.filter(g => GOODS.has(g))); } catch (e) {}
     S.db = localDb; S.assets = true; S.status = 'ready';
     restoreCrew();
   } catch (e) {
