@@ -175,6 +175,18 @@ button:disabled{ cursor:default }
 .crumb .disc{ width:16px; height:16px; margin:2px }
 .crumb .ic{ width:16px; height:16px; color:var(--faint) }
 
+/* Crews */
+.badge-crew{ color:var(--scan); border-color:color-mix(in srgb, var(--scan) 40%, transparent); text-transform:none; letter-spacing:0; max-width:96px }
+.badge-crew > span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.hero .badge-crew{ max-width:100% }
+.set .field{ justify-self:stretch }
+.crew-code{ display:flex; align-items:center; gap:14px }
+.crew-code .mono{ font-size:26px; letter-spacing:.12em }
+.live-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:var(--faint); vertical-align:1px }
+.live-dot.live{ background:var(--scan) }
+.live-pill{ font-family:var(--f-mono); font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--faint) }
+.live-pill.live{ color:var(--scan) }
+
 .stats{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; margin:0; background:var(--line-soft); border:1px solid var(--line-soft); border-radius:var(--r-l); overflow:hidden }
 .stats > div{ background:var(--hull); padding:10px 14px; min-width:0 }
 .stats > div:last-child:nth-child(odd){ grid-column:1 / -1 }
@@ -473,7 +485,7 @@ const photoUrl = id => photoUrls.get(id) || '';
 const imgTag = id => { const u = photoUrl(id); return `<img data-photo data-pid="${esc(id)}"${u ? ` src="${esc(u)}"` : ''} alt="" loading="lazy">`; };
 const labelOf = (pairs, v) => { const p = pairs.find(x => x[0] === v); return p && v ? p[1] : ''; };
 const starVar = c => STAR_COLORS.includes(c) ? `var(--star-${c.toLowerCase()})` : 'var(--faint)';
-const biomeColor = b => BIOMES[b] || BIOMES.Other;
+const biomeColor = b => Object.prototype.hasOwnProperty.call(BIOMES, b) ? BIOMES[b] : BIOMES.Other;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const hay = (...xs) => xs.flat().filter(Boolean).join(' ').toLowerCase();
 const sysHay = s => hay(s.name, s.galaxy, s.region, s.starColor, s.starClass, s.lifeform, s.economy, s.notes, s.glyphs);
@@ -544,7 +556,7 @@ function renderTop(route) {
   if (route.type === 'find') title = KIND_LABEL[(S.finds.get(route.id) || {}).kind] || 'Find';
   if (route.type === 'tab' && S.tab === 'log') {
     action = `<button class="icon-btn" data-act="settings" aria-label="Log settings">${icon('sliders')}</button>`;
-  } else if (route.type !== 'tab' && S.canWrite && S[COLL[route.type]].has(route.id)) {
+  } else if (route.type !== 'tab' && S.canWrite && isMine(S[COLL[route.type]].get(route.id))) {
     action = `<button class="top-btn" data-act="edit" data-type="${route.type}" data-id="${esc(route.id)}">${icon('edit')}Edit</button>`;
   }
   $('#top-title').textContent = title;
@@ -583,7 +595,8 @@ const planetDisc = p => `<span class="disc${p.body === 'Moon' ? ' moon' : ''}" s
 const kindTile = (kind, extra = '') => `<span class="kind-tile${extra}" aria-hidden="true">${icon(KIND_LABEL[kind] ? kind : 'other')}</span>`;
 
 function rowEnd(item, extra = '') {
-  return `<span class="row-end">${extra}${item.favorite ? icon('star', 'ic-fav') : ''}${icon('chevron', 'ic-chev')}</span>`;
+  const who = item._crew ? `<span class="badge badge-crew"><span>${esc(ownerName(item._owner))}</span></span>` : '';
+  return `<span class="row-end">${who}${extra}${item.favorite ? icon('star', 'ic-fav') : ''}${icon('chevron', 'ic-chev')}</span>`;
 }
 function systemRow(s, X) {
   const np = X.ps(s.id).length, nf = X.fs(s.id).length;
@@ -636,13 +649,15 @@ function photosBlock(ids) {
   return section(`Screenshots<span class="count">${ids.length}</span>`, '', `<div class="photos n${Math.min(ids.length, 3)}">${ids.map(id => `<button class="photo" data-act="photo" data-pid="${esc(id)}" aria-label="View screenshot full size">${imgTag(id)}</button>`).join('')}</div>`);
 }
 function heroActions(type, item) {
+  if (item._crew) return `<div class="hero-actions"><span class="badge badge-crew"><span>Shared by ${esc(ownerName(item._owner))}</span></span></div>`;
   const fav = S.canWrite ? `<button class="chip" data-act="fav" data-type="${type}" data-id="${esc(item.id)}" aria-pressed="${!!item.favorite}">${icon('star')}${item.favorite ? 'Starred' : 'Star'}</button>` : (item.favorite ? `<span class="badge">Starred</span>` : '');
   const ex = item.example ? '<span class="badge">Example</span>' : '';
   return fav || ex ? `<div class="hero-actions">${fav}${ex}</div>` : '';
 }
 function metaLine(item) {
   const c = fmtDate(item.createdAt), u = fmtDate(item.updatedAt);
-  return c ? `<p class="meta">Logged ${esc(c)}${u && u !== c ? ` · edited ${esc(u)}` : ''}</p>` : '';
+  const by = item._crew ? ` by ${esc(ownerName(item._owner))} on` : '';
+  return c ? `<p class="meta">Logged${by} ${esc(c)}${u && u !== c ? ` · edited ${esc(u)}` : ''}</p>` : '';
 }
 function missing() {
   return gate() || `<div class="empty"><h3>This entry is gone</h3><p>It was deleted, maybe in another window.</p><button class="btn" data-act="back">Go back</button></div>`;
@@ -656,18 +671,29 @@ function viewLog(X) {
   if (ex && S.canWrite) out.push(`<div class="banner"><div><b>These are example entries.</b><p>They show how a logged system looks. Remove them when you start your own log.</p></div><button class="btn btn-sm" data-act="remove-examples">Remove</button></div>`);
   const q = norm(S.filters.log);
   if (q) return out.join('') + searchResults(q, X);
-  const total = S.systems.size + S.planets.size + S.finds.size;
-  if (!total) {
+  // Totals, Starred and Recently logged are your own; the crew gets its own section
+  const ns = mineOf('systems').length, np = mineOf('planets').length, nf = mineOf('finds').length;
+  if (!(ns + np + nf)) {
     out.push(emptyState('Your log is empty', 'Warp somewhere new, then log the system: its star, economy and portal glyphs. Planets and finds go inside it.', S.canWrite ? newBtn('system', 'Log a star system') : ''));
+    if (crew.code) out.push(crewFeed(X));
     return out.join('');
   }
-  out.push(`<div class="totals">${[['systems', S.systems.size, 'Systems'], ['planets', S.planets.size, 'Planets'], ['finds', S.finds.size, 'Finds']].map(([t, n, l]) => `<button class="total" data-act="tab" data-tab="${t}"><b>${n}</b><span>${l}</span></button>`).join('')}</div>`);
-  const tagged = [...all('systems').map(v => ['system', v]), ...all('planets').map(v => ['planet', v]), ...all('finds').map(v => ['find', v])];
+  out.push(`<div class="totals">${[['systems', ns, 'Systems'], ['planets', np, 'Planets'], ['finds', nf, 'Finds']].map(([t, n, l]) => `<button class="total" data-act="tab" data-tab="${t}"><b>${n}</b><span>${l}</span></button>`).join('')}</div>`);
+  const tagged = [...mineOf('systems').map(v => ['system', v]), ...mineOf('planets').map(v => ['planet', v]), ...mineOf('finds').map(v => ['find', v])];
   const favs = tagged.filter(([, v]) => v.favorite);
   if (favs.length) out.push(section(`Starred<span class="count">${favs.length}</span>`, '', listOf(favs.map(([t, v]) => rowFor(t, v, X)))));
   const recent = tagged.sort((a, b) => byRecent(a[1], b[1])).slice(0, 12);
   out.push(section('Recently logged', '', listOf(recent.map(([t, v]) => rowFor(t, v, X)))));
+  if (crew.code) out.push(crewFeed(X));
   return out.join('');
+}
+
+function crewFeed(X) {
+  const items = [...[...crew.items.systems.values()].map(v => ['system', v]), ...[...crew.items.planets.values()].map(v => ['planet', v]), ...[...crew.items.finds.values()].map(v => ['find', v])]
+    .sort((a, b) => byRecent(a[1], b[1])).slice(0, 12);
+  const st = crew.status === 'live' ? 'Live' : crew.status === 'connecting' ? 'Connecting' : 'Offline';
+  return section('Crew discoveries', `<span class="live-pill ${crew.status}"><span class="live-dot ${crew.status}"></span>${st}</span>`,
+    items.length ? listOf(items.map(([t, v]) => rowFor(t, v, X))) : '<p class="muted-note">Nothing from your crew yet. What they log shows up here straight away.</p>');
 }
 
 function searchResults(q, X) {
@@ -729,8 +755,8 @@ function viewSystem(id, X) {
     statsBlock([['Spectral class', s.starClass, 'mono'], ['Lifeform', s.lifeform], ['Economy', s.economy], ['Wealth', labelOf(WEALTH, s.wealth)], ['Conflict', labelOf(CONFLICT, s.conflict)]]),
     notesBlock(s.notes),
     photosBlock(s.photos),
-    section(`Planets & moons<span class="count">${planets.length}</span>`, S.canWrite ? newLink('planet', 'Add', { system: id }) : '', planets.length ? listOf(planets.map(p => planetRow(p, false))) : '<p class="muted-note">No planets logged in this system yet.</p>'),
-    section(`Finds<span class="count">${finds.length}</span>`, S.canWrite ? newLink('find', 'Add', { system: id }) : '', finds.length ? listOf(finds.map(f => findRow(f))) : '<p class="muted-note">No finds logged in this system yet.</p>'),
+    section(`Planets & moons<span class="count">${planets.length}</span>`, isMine(s) ? newLink('planet', 'Add', { system: id }) : '', planets.length ? listOf(planets.map(p => planetRow(p, false))) : '<p class="muted-note">No planets logged in this system yet.</p>'),
+    section(`Finds<span class="count">${finds.length}</span>`, isMine(s) ? newLink('find', 'Add', { system: id }) : '', finds.length ? listOf(finds.map(f => findRow(f))) : '<p class="muted-note">No finds logged in this system yet.</p>'),
     metaLine(s),
   ].join('');
 }
@@ -751,7 +777,7 @@ function viewPlanet(id, X) {
     (p.resources || []).length ? section(`Resources<span class="count">${p.resources.length}</span>`, '', `<div class="tags">${p.resources.map(r => `<span class="tag">${esc(r)}</span>`).join('')}</div>`) : '',
     notesBlock(p.notes),
     photosBlock(p.photos),
-    section(`Finds<span class="count">${finds.length}</span>`, S.canWrite ? newLink('find', 'Add', { system: p.systemId, planet: id }) : '', finds.length ? listOf(finds.map(f => findRow(f, false))) : `<p class="muted-note">Nothing logged on this ${p.body === 'Moon' ? 'moon' : 'planet'} yet.</p>`),
+    section(`Finds<span class="count">${finds.length}</span>`, isMine(p) ? newLink('find', 'Add', { system: p.systemId, planet: id }) : '', finds.length ? listOf(finds.map(f => findRow(f, false))) : `<p class="muted-note">Nothing logged on this ${p.body === 'Moon' ? 'moon' : 'planet'} yet.</p>`),
     metaLine(p),
   ].join('');
 }
@@ -844,7 +870,7 @@ const SPECS = {
 };
 const flatFields = spec => spec.fields.flatMap(f => f.row || [f]);
 const optPairs = opts => opts.map(o => Array.isArray(o) ? o : [o, o || 'Not recorded']);
-const recentSystem = () => all('systems').sort(byRecent)[0];
+const recentSystem = () => mineOf('systems').sort(byRecent)[0];
 
 function blankDraft(kind, ctx) {
   const rs = recentSystem();
@@ -867,12 +893,16 @@ function openForm(kind, existing, ctx) {
 }
 function openNew(kind, ctx) {
   if (!S.canWrite || S.status !== 'ready') return;
-  if (kind !== 'system' && !S.systems.size) kind = 'system';
+  if (kind !== 'system' && !mineOf('systems').length) kind = 'system';
+  // New entries only go inside your own systems and planets, never a crewmate's
+  ctx = Object.assign({}, ctx);
+  if (ctx.systemId && !isMine(S.systems.get(ctx.systemId))) ctx.systemId = '';
+  if (ctx.planetId && !isMine(S.planets.get(ctx.planetId))) ctx.planetId = '';
   openForm(kind, null, ctx);
 }
 function openEdit(type, id) {
   const item = S[COLL[type]].get(id);
-  if (item && S.canWrite) openForm(type, item);
+  if (isMine(item) && S.canWrite) openForm(type, item);
 }
 
 function renderForm(form) {
@@ -919,11 +949,11 @@ function renderField(f, form) {
     case 'pair':
       return `<div class="field" role="group" aria-labelledby="${id}-l">${lbl(id + '-l')}<div class="pair"><input class="input" type="number" inputmode="numeric" min="0" id="${id}" data-k="${f.k}" value="${esc(val(d[f.k]))}" aria-label="Creatures discovered"><span>of</span><input class="input" type="number" inputmode="numeric" min="0" id="f-${f.k2}" data-k="${f.k2}" value="${esc(val(d[f.k2]))}" aria-label="Creatures on this world"></div>${hint}</div>`;
     case 'system': {
-      const systems = all('systems').sort(byName);
+      const systems = mineOf('systems').sort(byName);
       return `<label class="field" for="${id}">${lbl()}<select class="input" id="${id}" data-k="${f.k}" data-rerender="1">${S.systems.has(d[f.k]) ? '' : '<option value="">Choose a system</option>'}${systems.map(s => `<option value="${esc(s.id)}"${s.id === d[f.k] ? ' selected' : ''}>${esc(s.name || 'Unnamed system')}</option>`).join('')}</select></label>`;
     }
     case 'planet': {
-      const planets = d.systemId ? all('planets').filter(p => p.systemId === d.systemId).sort(byBody) : [];
+      const planets = d.systemId ? mineOf('planets').filter(p => p.systemId === d.systemId).sort(byBody) : [];
       return `<label class="field" for="${id}">${lbl()}<select class="input" id="${id}" data-k="${f.k}" data-rerender="1"><option value="">In space (station, orbit, freighter)</option>${planets.map(p => `<option value="${esc(p.id)}"${p.id === d[f.k] ? ' selected' : ''}>${esc(p.name)}${p.body === 'Moon' ? ' (moon)' : ''}</option>`).join('')}</select>${planets.length ? '' : '<span class="hint">No planets logged in this system yet.</span>'}</label>`;
     }
     case 'glyphs':
@@ -983,8 +1013,8 @@ async function submitForm(form) {
   const fail = msg => { form.error = msg; refreshSheet(); const b = $('#sheet-body'); if (b) b.scrollTop = 0; };
   if (form.uploading) return fail('Screenshots are still being added. Save again in a moment.');
   if (!String(d.name || '').trim()) return fail(`Give the ${spec.noun} a name.`);
-  if (form.kind !== 'system' && !S.systems.has(d.systemId)) return fail('Pick the star system it belongs to.');
-  if (form.kind === 'find' && d.planetId && !S.planets.has(d.planetId)) d.planetId = '';
+  if (form.kind !== 'system' && !isMine(S.systems.get(d.systemId))) return fail('Pick the star system it belongs to.');
+  if (form.kind === 'find' && d.planetId && !isMine(S.planets.get(d.planetId))) d.planetId = '';
   const body = normalize(form.kind, d);
   const now = new Date().toISOString();
   const prev = form.id ? S[spec.coll].get(form.id) : null;
@@ -1102,7 +1132,7 @@ async function addPhotos(form, files) {
 /* ---------- Other actions ---------- */
 async function toggleFav(type, id) {
   const coll = COLL[type], item = S[coll].get(id);
-  if (!item || !S.canWrite) return;
+  if (!isMine(item) || !S.canWrite) return;
   const next = !item.favorite;
   S[coll].set(id, Object.assign({}, item, { favorite: next })); render();
   try { await withRetry(() => S.db.collection(coll).doc(id).update({ favorite: next })); }
@@ -1129,8 +1159,10 @@ function openAdd() {
   if (r.type === 'system') systemId = r.id;
   if (r.type === 'planet') { planetId = r.id; systemId = (S.planets.get(r.id) || {}).systemId || ''; }
   if (r.type === 'find') { const f = S.finds.get(r.id); if (f) { systemId = f.systemId; planetId = f.planetId || ''; } }
+  if (!isMine(S.systems.get(systemId))) systemId = '';
+  if (!isMine(S.planets.get(planetId))) planetId = '';
   openSheet({ title: 'Log a discovery', cancelLabel: 'Close', scrimClose: true, ctx: { systemId, planetId }, render: () => {
-    const sys = S.systems.get(systemId), pl = S.planets.get(planetId), none = !S.systems.size;
+    const sys = S.systems.get(systemId), pl = S.planets.get(planetId), none = !mineOf('systems').length;
     return `<div class="choices">
       <button type="button" class="choice" data-sheet-act="new-system">${starDot('Yellow')}<span><b>Star system</b><small>Just warped in? Start here.</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-planet"${none ? ' disabled' : ''}>${planetDisc({ biome: 'Lush' })}<span><b>Planet or moon</b><small>${sys ? 'In ' + esc(sys.name) : 'Biome, weather, sentinels, resources'}</small></span></button>
@@ -1140,7 +1172,7 @@ function openAdd() {
 }
 
 /* ---------- Settings: backup, restore, examples, install ---------- */
-const freshSettings = (o = {}) => Object.assign({ restore: null, busy: '', confirmExamples: false, msg: '', backup: null, usage: '' }, o);
+const freshSettings = (o = {}) => Object.assign({ restore: null, busy: '', confirmExamples: false, msg: '', backup: null, usage: '', crewMode: '', crewName: crew.name, crewCode: '', crewError: '', crewConfirmLeave: false }, o);
 function openSettings(opts = {}) {
   S.settings = freshSettings({ confirmExamples: !!opts.examples });
   openSheet({ title: 'Log settings', cancelLabel: 'Close', scrimClose: true, render: renderSettings });
@@ -1149,6 +1181,7 @@ function openSettings(opts = {}) {
 function renderSettings() {
   const st = S.settings, ex = exampleCount(), out = [];
   if (st.msg) out.push(`<div class="form-ok" role="status">${esc(st.msg)}</div>`);
+  if (FIREBASE_CONFIG && S.status === 'ready') out.push(renderCrewSettings());
   if (ex && S.canWrite) {
     const n = `${ex} example ${ex === 1 ? 'entry' : 'entries'}`;
     out.push(`<section class="set"><h3>Example entries</h3>${st.confirmExamples
@@ -1183,7 +1216,7 @@ async function makeBackup() {
   if (S.settings.busy) return;
   S.settings.busy = 'export'; S.settings.msg = ''; refreshSheet();
   try {
-    const colls = { systems: all('systems'), planets: all('planets'), finds: all('finds') };
+    const colls = { systems: mineOf('systems'), planets: mineOf('planets'), finds: mineOf('finds') };
     const ids = new Set();
     for (const c in colls) for (const x of colls[c]) for (const id of (x.photos || [])) if (validAssetId(id)) ids.add(id);
     const head = JSON.stringify(Object.assign({ app: 'travellers-log', version: 2, exportedAt: new Date().toISOString() }, colls));
@@ -1262,6 +1295,7 @@ async function doRestore() {
   }
   try { await loadAll(); } catch (e) {}
   changed();
+  syncOwn();
   const what = `${plural(ok, 'entry', 'entries')}${shots ? ` and ${plural(shots, 'screenshot')}` : ''}`;
   S.settings = freshSettings({ msg: failed ? `Restored ${what}. ${failed} couldn’t be saved.` : `Restored ${what}.` });
   refreshSheet(); render();
@@ -1360,6 +1394,18 @@ function onSheetClick(e) {
     case 'examples-ask': S.settings.confirmExamples = true; S.settings.msg = ''; refreshSheet(); break;
     case 'examples-cancel': S.settings.confirmExamples = false; refreshSheet(); break;
     case 'examples-go': removeExamples(); break;
+    case 'crew-start': case 'crew-join':
+      S.settings.crewMode = ds.sheetAct === 'crew-start' ? 'create' : 'join'; S.settings.crewError = ''; S.settings.msg = '';
+      refreshSheet(); setTimeout(() => { const el = $('#crew-name'); if (el && !el.value) el.focus(); else { const c = $('#crew-code'); if (c) c.focus(); } }, 50);
+      break;
+    case 'crew-cancel': S.settings.crewMode = ''; S.settings.crewError = ''; refreshSheet(); break;
+    case 'crew-create-go': createCrew(); break;
+    case 'crew-join-go': joinCrew(); break;
+    case 'crew-copy': copyText(fmtCode(crew.code)); break;
+    case 'crew-share': shareInvite(); break;
+    case 'crew-leave-ask': S.settings.crewConfirmLeave = true; S.settings.crewError = ''; refreshSheet(); break;
+    case 'crew-leave-cancel': S.settings.crewConfirmLeave = false; refreshSheet(); break;
+    case 'crew-leave-go': leaveCrew(); break;
   }
 }
 
@@ -1373,6 +1419,9 @@ function addCustom(form, k) {
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset && t.dataset.filter) { S.filters[t.dataset.filter] = t.value; render(); return; }
+  // Crew name and code survive the settings sheet re-drawing
+  if (t.id === 'crew-name') { S.settings.crewName = t.value; return; }
+  if (t.id === 'crew-code') { S.settings.crewCode = t.value; return; }
   const form = sheetState && sheetState.form; if (!form) return;
   if (t.id === 'f-glyphs') {
     const v = t.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
@@ -1411,6 +1460,11 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (!lightbox.hidden) { closeLightbox(); return; }
     if (sheetState && !sheetState.form) closeSheet();
+    return;
+  }
+  if (e.key === 'Enter' && (e.target.id === 'crew-name' || e.target.id === 'crew-code')) {
+    e.preventDefault();
+    if (S.settings.crewMode === 'create') createCrew(); else if (S.settings.crewMode === 'join') joinCrew();
     return;
   }
   if (e.key === 'Enter' && e.target.id && /^f-.+-add$/.test(e.target.id)) {
@@ -1488,12 +1542,12 @@ const localDb = {
       const docId = id || newId();
       return {
         id: docId,
-        set: body => store.put(coll, docId, body).then(changed),
+        set: body => store.put(coll, docId, body).then(() => { changed(); pushOwn(coll, Object.assign({}, body, { id: docId })); }),
         update: patch => store.get(coll, docId).then(cur => {
           if (!cur) throw { code: 'not_found' };
           return store.put(coll, docId, Object.assign({}, cur, patch));
         }).then(changed),
-        delete: () => store.del(coll, docId).then(changed),
+        delete: () => store.del(coll, docId).then(() => { changed(); dropOwn(coll, docId); }),
       };
     },
   }),
@@ -1505,6 +1559,7 @@ async function loadAll() {
     S[coll] = new Map(rows.map(([id, v]) => [id, Object.assign({}, v, { id })]));
     S.loaded[coll] = true;
   }
+  applyCrew();
 }
 async function seedOnce() {
   if (await store.get('meta', 'seeded')) return;
@@ -1512,6 +1567,289 @@ async function seedOnce() {
     for (const coll of ['systems', 'planets', 'finds']) for (const d of SEED[coll]) { const b = Object.assign({}, d); delete b.id; t.objectStore(coll).put(b, d.id); }
     t.objectStore('meta').put(new Date().toISOString(), 'seeded');
   });
+}
+
+/* ---------- Crews: share discoveries with friends, live, through Firebase ---------- */
+// The web app config from the Firebase console (Project settings → Your apps).
+// It's fine for this to be public: the Firestore security rules decide who can read and write what.
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyB9oBg2yt6J9GrnnyeO5luUC8b3XZjXgC0',
+  authDomain: 'travellers-log-21b82.firebaseapp.com',
+  projectId: 'travellers-log-21b82',
+  storageBucket: 'travellers-log-21b82.firebasestorage.app',
+  messagingSenderId: '751077060762',
+  appId: '1:751077060762:web:370d84f1e6a93cd155af23',
+};
+const FIREBASE_VER = '12.0.0';
+const CODE_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';   // no 0/O or 1/I to mix up
+const TYPE_OF = { systems: 'system', planets: 'planet', finds: 'find' };
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const crew = {
+  fb: null, uid: '', code: '', name: '',
+  status: 'off',               // off | connecting | live | offline | error
+  error: '',
+  members: new Map(),          // uid -> name
+  docs: [],                    // everyone's shared entries, as stored online
+  items: { systems: new Map(), planets: new Map(), finds: new Map() },
+  unsubs: [],
+};
+const crewOn = () => !!(crew.fb && crew.code && crew.uid);
+const isMine = x => !!x && !x._crew;
+const mineOf = c => all(c).filter(isMine);
+const ownerName = uid => crew.members.get(uid) || 'Crewmate';
+const fmtCode = c => c.length === 8 ? c.slice(0, 4) + '-' + c.slice(4) : c;
+const normCode = s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+const cleanName = s => String(s || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+const makeCode = () => { const a = new Uint8Array(8); crypto.getRandomValues(a); return Array.from(a, b => CODE_CHARS[b % 32]).join(''); };
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej({ code: 'timeout' }), ms))]);
+const settingsOpen = () => !!(sheetState && sheetState.render === renderSettings);
+
+// Firebase loads only once someone starts or joins a crew
+let fbLoading = null;
+function loadFirebase() {
+  if (!fbLoading) fbLoading = (async () => {
+    const base = `https://www.gstatic.com/firebasejs/${FIREBASE_VER}/`;
+    const [appM, authM, fs] = await Promise.all(['firebase-app.js', 'firebase-auth.js', 'firebase-firestore.js'].map(f => import(base + f)));
+    const app = appM.getApps().length ? appM.getApp() : appM.initializeApp(FIREBASE_CONFIG);
+    let db;
+    try { db = fs.initializeFirestore(app, { ignoreUndefinedProperties: true, localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }); }
+    catch (e) { db = fs.getFirestore(app); }
+    // Each phone gets an anonymous account, so nobody needs to sign up
+    const auth = authM.getAuth(app);
+    await auth.authStateReady();
+    if (!auth.currentUser) await authM.signInAnonymously(auth);
+    crew.uid = auth.currentUser.uid;
+    return (crew.fb = { fs, db });
+  })().catch(e => { fbLoading = null; throw e; });
+  return fbLoading;
+}
+
+function crewChanged() { scheduleRender(); if (settingsOpen()) refreshSheet(); }
+function stopCrew() { crew.unsubs.forEach(u => { try { u(); } catch (e) {} }); crew.unsubs = []; }
+
+async function restoreCrew() {
+  try { crew.name = (await store.get('meta', 'crew-name')) || ''; } catch (e) {}
+  if (!FIREBASE_CONFIG) return;
+  let saved = null;
+  try { saved = await store.get('meta', 'crew'); } catch (e) {}
+  if (saved && saved.code) { crew.code = saved.code; crew.name = saved.name || crew.name; connectCrew(); }
+}
+window.addEventListener('online', () => { if (FIREBASE_CONFIG && crew.code && !crewOn()) connectCrew(); });
+
+async function connectCrew() {
+  if (!FIREBASE_CONFIG || !crew.code) return;
+  crew.status = 'connecting'; crew.error = ''; crewChanged();
+  let fb;
+  try { fb = await loadFirebase(); }
+  catch (e) { crew.status = 'offline'; crewChanged(); return; }   // tries again when the phone is back online
+  const { fs, db } = fb, code = crew.code;
+  stopCrew();
+  const onErr = err => {
+    crew.status = 'error';
+    crew.error = err && err.code === 'permission-denied' ? 'You’re not in this crew any more. Leave it, then join again with the code.' : 'Can’t reach the crew right now.';
+    crewChanged();
+  };
+  crew.unsubs.push(fs.onSnapshot(fs.collection(db, 'crews', code, 'members'), snap => {
+    crew.members = new Map(snap.docs.map(d => [d.id, cleanName((d.data() || {}).name) || 'Traveller']));
+    crewChanged();
+  }, onErr));
+  crew.unsubs.push(fs.onSnapshot(fs.collection(db, 'crews', code, 'items'), { includeMetadataChanges: true }, snap => {
+    const before = crew.status;
+    crew.status = snap.metadata.fromCache ? 'offline' : 'live';
+    crew.docs = snap.docs.map(d => d.data());
+    buildCrewItems();
+    scheduleRender();
+    if (before !== crew.status && settingsOpen()) refreshSheet();
+  }, onErr));
+  syncOwn();
+}
+
+// Crewmates' entries are other people's data: keep only plain fields of sane size
+function cleanShared(data) {
+  const o = {};
+  if (!data || typeof data !== 'object') return o;
+  for (const [k, v] of Object.entries(data)) {
+    if (!/^[a-zA-Z]{1,30}$/.test(k)) continue;
+    if (typeof v === 'string') o[k] = v.slice(0, 5000);
+    else if (typeof v === 'number' && Number.isFinite(v)) o[k] = v;
+    else if (typeof v === 'boolean' || v === null) o[k] = v;
+    else if (Array.isArray(v)) o[k] = v.filter(x => typeof x === 'string').slice(0, 100).map(x => x.slice(0, 200));
+  }
+  return o;
+}
+function buildCrewItems() {
+  const items = { systems: new Map(), planets: new Map(), finds: new Map() };
+  for (const d of crew.docs) {
+    if (!d || typeof d.owner !== 'string' || d.owner === crew.uid || typeof d.id !== 'string' || !hasOwn(COLL, d.type)) continue;
+    const pre = d.owner + '~';
+    const v = Object.assign(cleanShared(d.data), { id: pre + d.id, _crew: true, _owner: d.owner, photos: [], favorite: false, example: false });
+    if (typeof v.systemId === 'string' && v.systemId) v.systemId = pre + v.systemId;
+    if (typeof v.planetId === 'string' && v.planetId) v.planetId = pre + v.planetId;
+    if (d.type === 'find' && !hasOwn(KIND_LABEL, v.kind)) v.kind = 'other';
+    if (!['S', 'A', 'B', 'C'].includes(v.cls)) v.cls = '';
+    items[COLL[d.type]].set(v.id, v);
+  }
+  crew.items = items;
+  applyCrew();
+}
+// Your own entries plus the crew's, in the lists the views read from
+function applyCrew() {
+  for (const c of ['systems', 'planets', 'finds']) {
+    const m = new Map();
+    for (const [id, v] of S[c]) if (!v._crew) m.set(id, v);
+    for (const [id, v] of crew.items[c]) m.set(id, v);
+    S[c] = m;
+  }
+}
+
+// Sending your own entries. Screenshots, stars and example entries stay on this phone.
+function shareData(item) {
+  const d = Object.assign({}, item);
+  for (const k of ['id', 'photos', 'favorite', 'example', '_crew', '_owner']) delete d[k];
+  return d;
+}
+const crewKey = (type, id) => `${crew.uid}_${type}_${id}`;
+const crewPayload = (type, item) => ({ owner: crew.uid, type, id: item.id, data: shareData(item), updatedAt: item.updatedAt || '' });
+function pushOwn(coll, item) {
+  if (!crewOn() || !item || item._crew || item.example) return;
+  const { fs, db } = crew.fb, type = TYPE_OF[coll];
+  fs.setDoc(fs.doc(db, 'crews', crew.code, 'items', crewKey(type, item.id)), crewPayload(type, item)).catch(() => {});
+}
+function dropOwn(coll, id) {
+  if (!crewOn()) return;
+  const { fs, db } = crew.fb;
+  fs.deleteDoc(fs.doc(db, 'crews', crew.code, 'items', crewKey(TYPE_OF[coll], id))).catch(() => {});
+}
+// Makes the crew's copy of your log match your phone (after joining, restoring, or time offline)
+async function syncOwn() {
+  if (!crewOn()) return;
+  const { fs, db } = crew.fb, code = crew.code;
+  try {
+    const snap = await fs.getDocs(fs.query(fs.collection(db, 'crews', code, 'items'), fs.where('owner', '==', crew.uid)));
+    const remote = new Map(snap.docs.map(d => [d.id, d.data()]));
+    const writes = [];
+    for (const coll of ['systems', 'planets', 'finds']) {
+      const type = TYPE_OF[coll];
+      for (const it of mineOf(coll)) {
+        if (it.example) continue;
+        const key = crewKey(type, it.id), r = remote.get(key);
+        remote.delete(key);
+        if (!r || r.updatedAt !== (it.updatedAt || '')) writes.push(b => b.set(fs.doc(db, 'crews', code, 'items', key), crewPayload(type, it)));
+      }
+    }
+    for (const key of remote.keys()) writes.push(b => b.delete(fs.doc(db, 'crews', code, 'items', key)));
+    for (let i = 0; i < writes.length; i += 200) {
+      const b = fs.writeBatch(db);
+      writes.slice(i, i + 200).forEach(w => w(b));
+      await b.commit();
+    }
+  } catch (e) { /* tries again next time the app opens */ }
+}
+
+async function saveCrew(code, name) {
+  crew.code = code; crew.name = name;
+  try { await store.put('meta', 'crew', code ? { code, name } : null); } catch (e) {}
+  if (name) store.put('meta', 'crew-name', name).catch(() => {});
+}
+function crewFail(msg) { S.settings.busy = ''; S.settings.crewError = msg; refreshSheet(); }
+function crewErrorText(e) {
+  const c = e && e.code;
+  if (c === 'timeout' || c === 'unavailable' || !navigator.onLine) return 'Couldn’t reach the crew server. Check your internet and try again.';
+  if (c === 'permission-denied') return 'The crew server said no. Check the code and try again.';
+  return 'Something went wrong. Try again in a moment.';
+}
+
+async function createCrew() {
+  const st = S.settings, name = cleanName(st.crewName);
+  if (!name) return crewFail('Enter your name first, so your crew can see who logged what.');
+  st.busy = 'crew'; st.crewError = ''; refreshSheet();
+  try {
+    const { fs, db } = await withTimeout(loadFirebase(), 20000);
+    let code = '';
+    for (let i = 0; i < 3 && !code; i++) {
+      const c = makeCode();
+      try { await withTimeout(fs.setDoc(fs.doc(db, 'crews', c), { createdBy: crew.uid, createdAt: fs.serverTimestamp() }), 15000); code = c; }
+      catch (e) { if (!e || e.code !== 'permission-denied') throw e; }   // that code is taken: try another
+    }
+    if (!code) throw { code: 'unavailable' };
+    await withTimeout(fs.setDoc(fs.doc(db, 'crews', code, 'members', crew.uid), { name, joinedAt: fs.serverTimestamp() }), 15000);
+    await saveCrew(code, name);
+  } catch (e) { return crewFail(crewErrorText(e)); }
+  S.settings = freshSettings({ msg: `Crew started. Invite your friends with the code ${fmtCode(crew.code)}.` });
+  connectCrew(); refreshSheet(); render();
+}
+
+async function joinCrew() {
+  const st = S.settings, name = cleanName(st.crewName), code = normCode(st.crewCode);
+  if (!name) return crewFail('Enter your name first, so your crew can see who logged what.');
+  if (code.length !== 8) return crewFail('A crew code has 8 letters and numbers, like K7Q2-MXP9.');
+  st.busy = 'crew'; st.crewError = ''; refreshSheet();
+  try {
+    const { fs, db } = await withTimeout(loadFirebase(), 20000);
+    const snap = await withTimeout(fs.getDocFromServer(fs.doc(db, 'crews', code)), 15000);
+    if (!snap.exists()) return crewFail('No crew has that code. Check it with your friend.');
+    await withTimeout(fs.setDoc(fs.doc(db, 'crews', code, 'members', crew.uid), { name, joinedAt: fs.serverTimestamp() }), 15000);
+    await saveCrew(code, name);
+  } catch (e) { return crewFail(crewErrorText(e)); }
+  S.settings = freshSettings({ msg: 'You joined the crew. Your discoveries and theirs now update live for everyone.' });
+  connectCrew(); refreshSheet(); render();
+}
+
+async function leaveCrew() {
+  const st = S.settings;
+  st.busy = 'crew'; st.crewError = ''; refreshSheet();
+  try {
+    const { fs, db } = await withTimeout(loadFirebase(), 20000), code = crew.code;
+    const snap = await withTimeout(fs.getDocs(fs.query(fs.collection(db, 'crews', code, 'items'), fs.where('owner', '==', crew.uid))), 15000);
+    for (let i = 0; i < snap.docs.length; i += 200) {
+      const b = fs.writeBatch(db);
+      snap.docs.slice(i, i + 200).forEach(d => b.delete(d.ref));
+      await withTimeout(b.commit(), 15000);
+    }
+    await withTimeout(fs.deleteDoc(fs.doc(db, 'crews', code, 'members', crew.uid)), 15000);
+  } catch (e) { return crewFail('Couldn’t reach the crew server to leave. Check your internet and try again.'); }
+  stopCrew();
+  await saveCrew('', crew.name);
+  crew.status = 'off'; crew.members = new Map(); crew.docs = [];
+  crew.items = { systems: new Map(), planets: new Map(), finds: new Map() };
+  applyCrew();
+  S.stack = S.stack.filter(r => S[COLL[r.type]].has(r.id));
+  S.settings = freshSettings({ msg: 'You left the crew. Your own log is still here.' });
+  refreshSheet(); render();
+}
+
+function shareInvite() {
+  const url = location.origin + location.pathname;
+  const text = `Join my No Man's Sky crew in Traveller's Log! Open ${url} and add it to your home screen, then go to Settings → Crew → Join with a code and enter ${fmtCode(crew.code)}`;
+  if (navigator.share) { navigator.share({ title: "Traveller's Log crew", text }).catch(() => {}); return; }
+  try { navigator.clipboard.writeText(text).then(() => toast('Invite copied. Paste it to your friends.'), () => toast(`Your crew code is ${fmtCode(crew.code)}`)); }
+  catch (e) { toast(`Your crew code is ${fmtCode(crew.code)}`); }
+}
+
+function renderCrewSettings() {
+  const st = S.settings, busy = st.busy === 'crew';
+  const err = st.crewError ? `<div class="form-error" role="alert">${esc(st.crewError)}</div>` : '';
+  if (crew.code) {
+    const names = [...crew.members].map(([uid, n]) => uid === crew.uid ? `${n} (you)` : n);
+    const status = { live: 'Live', connecting: 'Connecting…', offline: 'Offline. Changes sync when you’re back online.', error: crew.error, off: '' }[crew.status] || '';
+    return `<section class="set"><h3>Crew</h3>${err}
+      <div class="crew-code"><span class="mono">${esc(fmtCode(crew.code))}</span><button type="button" class="link-btn" data-sheet-act="crew-copy">Copy code</button></div>
+      <p>Friends join in Settings → Crew → Join with a code. Everyone sees each other's systems, planets and finds as they're logged.</p>
+      <button type="button" class="btn btn-primary" data-sheet-act="crew-share">${icon('share')}Invite friends</button>
+      <p class="hint"><span class="live-dot ${crew.status}"></span>${esc(status)}${names.length ? ` · ${esc(names.join(', '))}` : ''}</p>
+      ${st.crewConfirmLeave
+        ? `<p>Leave the crew? Your discoveries are taken out of it, and theirs leave your lists. Your own log stays.</p><div class="confirm-actions"><button type="button" class="btn btn-danger-solid" data-sheet-act="crew-leave-go"${busy ? ' disabled' : ''}>${busy ? 'Leaving…' : 'Leave crew'}</button><button type="button" class="btn" data-sheet-act="crew-leave-cancel">Stay</button></div>`
+        : '<button type="button" class="btn btn-danger" data-sheet-act="crew-leave-ask">Leave crew</button>'}</section>`;
+  }
+  const intro = '<p>Share discoveries with friends. Everyone in a crew sees each other\'s systems, planets and finds, updating live. Screenshots stay on each phone.</p>';
+  const nameField = `<label class="field" for="crew-name"><span class="lbl">Your name in the crew</span><input class="input" id="crew-name" value="${esc(st.crewName)}" maxlength="40" placeholder="Your in-game name" autocomplete="nickname" autocapitalize="words" enterkeyhint="go"></label>`;
+  if (st.crewMode === 'create') {
+    return `<section class="set"><h3>Start a crew</h3>${err}${nameField}<div class="confirm-actions"><button type="button" class="btn btn-primary" data-sheet-act="crew-create-go"${busy ? ' disabled' : ''}>${busy ? 'Starting…' : 'Start crew'}</button><button type="button" class="btn" data-sheet-act="crew-cancel">Cancel</button></div></section>`;
+  }
+  if (st.crewMode === 'join') {
+    return `<section class="set"><h3>Join a crew</h3>${err}${nameField}<label class="field" for="crew-code"><span class="lbl">Crew code</span><input class="input mono" id="crew-code" value="${esc(st.crewCode)}" maxlength="12" placeholder="K7Q2-MXP9" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go"></label><div class="confirm-actions"><button type="button" class="btn btn-primary" data-sheet-act="crew-join-go"${busy ? ' disabled' : ''}>${busy ? 'Joining…' : 'Join crew'}</button><button type="button" class="btn" data-sheet-act="crew-cancel">Cancel</button></div></section>`;
+  }
+  return `<section class="set"><h3>Crew</h3>${intro}${err}<div class="confirm-actions"><button type="button" class="btn btn-primary" data-sheet-act="crew-start">Start a crew</button><button type="button" class="btn" data-sheet-act="crew-join">Join with a code</button></div></section>`;
 }
 
 /* ---------- Installing ---------- */
@@ -1549,6 +1887,7 @@ async function boot() {
     await seedOnce();
     await loadAll();
     S.db = localDb; S.assets = true; S.status = 'ready';
+    restoreCrew();
   } catch (e) {
     S.status = 'unsupported';
   }

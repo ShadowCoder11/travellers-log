@@ -3,6 +3,7 @@
 // so a new version of the app shows up the next time it's opened.
 const SHELL = 'tlog-shell-v2';
 const FONTS = 'tlog-fonts-v1';
+const LIBS = 'tlog-libs-v1';
 const SCOPE = self.registration.scope;
 const INDEX = new URL('./', SCOPE).href;
 const FILES = ['./', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
@@ -18,7 +19,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k.startsWith('tlog-') && k !== SHELL && k !== FONTS).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k.startsWith('tlog-') && ![SHELL, FONTS, LIBS].includes(k)).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -34,6 +35,9 @@ self.addEventListener('fetch', e => {
     e.respondWith(cached(e, SHELL, req, key, true));
   } else if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
     e.respondWith(cached(e, FONTS, req, req, false));
+  } else if (url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/')) {
+    // The crew code library: versioned files that never change, kept for offline use
+    e.respondWith(cached(e, LIBS, req, req, false));
   }
 });
 
