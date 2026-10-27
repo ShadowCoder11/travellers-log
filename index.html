@@ -198,7 +198,8 @@ button:disabled{ cursor:default }
 /* Resource finder */
 .here{ display:flex; align-items:center; gap:12px; padding:12px 12px 12px 14px; border-radius:var(--r-l); background:var(--hull); border:1px solid var(--line-soft) }
 .here > div{ flex:1; min-width:0; display:grid }
-.here b, .here small{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.here b{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.here small{ overflow-wrap:anywhere }
 .here small{ color:var(--muted); font-size:14px }
 
 /* Trade routes */
@@ -321,7 +322,7 @@ button:disabled{ cursor:default }
 
 /* Bottom tabs and Add button */
 .tabbar{ position:fixed; left:0; right:0; bottom:0; z-index:20; background:var(--hull); border-top:1px solid var(--line-soft); padding-bottom:env(safe-area-inset-bottom,0px) }
-.tabbar-inner{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); height:var(--tabbar-h) }
+.tabbar-inner{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); height:var(--tabbar-h) }
 .tab{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:0; background:transparent; color:var(--muted); font-family:var(--f-display); font-size:12px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; cursor:pointer }
 .tab[aria-current="page"]{ color:var(--flare) }
 .tab[aria-current="page"]::before{ content:""; position:absolute; top:-1px; left:28%; right:28%; height:2px; border-radius:0 0 2px 2px; background:var(--flare) }
@@ -411,6 +412,7 @@ textarea.input{ min-height:96px; resize:vertical; line-height:1.45 }
     <button class="tab" data-act="tab" data-tab="systems" data-icon="system"><span>Systems</span></button>
     <button class="tab" data-act="tab" data-tab="planets" data-icon="planet"><span>Planets</span></button>
     <button class="tab" data-act="tab" data-tab="finds" data-icon="scan"><span>Finds</span></button>
+    <button class="tab" data-act="tab" data-tab="tools" data-icon="tools"><span>Tools</span></button>
   </div>
 </nav>
 
@@ -586,6 +588,7 @@ const I = {
   other:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4.6M12 16h.01"/>',
   share:'<path d="M12 14.5V3.5M8 7.2l4-3.7 4 3.7M7.5 10H5.5v10.5h13V10h-2"/>',
   trade:'<path d="M4 8h15M15.5 4.5L19 8l-3.5 3.5M20 16H5M8.5 12.5L5 16l3.5 3.5"/>',
+  tools:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/>',
   recipe:'<path d="M3.5 11.5h17a8.5 8.5 0 0 1-17 0zM9 3.8c-.9 1.1.9 2.1 0 3.2M12 3.3c-.9 1.1.9 2.1 0 3.2M15 3.8c-.9 1.1.9 2.1 0 3.2"/>',
 };
 const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || ''}</svg>`;
@@ -698,7 +701,7 @@ function render() {
 }
 
 function renderTop(route) {
-  const TITLES = { log: "Traveller's Log", systems: 'Star systems', planets: 'Planets & moons', finds: 'Finds' };
+  const TITLES = { log: "Traveller's Log", systems: 'Star systems', planets: 'Planets & moons', finds: 'Finds', tools: 'Tools' };
   let title = TITLES[S.tab], action = '';
   if (route.type === 'system') title = 'Star system';
   if (route.type === 'planet') title = (S.planets.get(route.id) || {}).body === 'Moon' ? 'Moon' : 'Planet';
@@ -729,6 +732,7 @@ function viewFor(route, X) {
   if (S.tab === 'systems') return { key: 'tab:systems', head: searchBox('systems', 'Filter by name, galaxy, region, glyphs'), body: viewSystems(X) };
   if (S.tab === 'planets') return { key: 'tab:planets', head: searchBox('planets', 'Filter by name, biome, resource'), body: viewPlanets() };
   if (S.tab === 'finds') return { key: 'tab:finds', head: searchBox('finds', 'Filter by name, type, notes'), body: viewFinds() };
+  if (S.tab === 'tools') return { key: 'tab:tools', head: '', body: viewTools() };
   return { key: 'tab:log', head: searchBox('log', 'Search your whole log'), body: viewLog(X) };
 }
 
@@ -795,16 +799,15 @@ function recipeRow(r, note = '') {
 }
 const rowFor = (t, v, X, note = '') => t === 'system' ? systemRow(v, X, note) : t === 'planet' ? planetRow(v, true, '', note) : t === 'recipe' ? recipeRow(v, note) : findRow(v, true, note);
 const toolRow = (act, ic, title, sub) => `<button class="row" data-act="${act}"><span class="kind-tile" aria-hidden="true">${icon(ic)}</span><span class="row-main"><span class="row-title">${title}</span><span class="row-sub">${sub}</span></span><span class="row-end">${icon('chevron', 'ic-chev')}</span></button>`;
-const finderRow = () => toolRow('resources', 'mineral', 'Resource finder', 'Which planets have what you need');
-const finderLink = () => listOf([finderRow()]);
-// The Log's tools: resource finder, trade routes, recipe book
-function toolsCard() {
+// The Tools tab: where you are (used by the finder and trade routes), then the tools
+function viewTools() {
+  const g = gate(); if (g) return g;
   const nr = S.recipes.size;
-  return listOf([
-    S.planets.size ? finderRow() : '',
+  return hereSection('tools') + section('Tools', '', listOf([
+    toolRow('resources', 'mineral', 'Resource finder', 'Which planets have what you need'),
     toolRow('trade', 'trade', 'Trade routes', 'Where to sell for the most units'),
     toolRow('recipes', 'recipe', 'Recipe book', nr ? `${plural(nr, 'recipe')}${crew.code ? ', shared with your crew' : ''}` : (crew.code ? 'Food recipes, shared with your crew' : 'Your food recipes')),
-  ].filter(Boolean));
+  ]));
 }
 
 function glyphStrip(code) {
@@ -864,12 +867,10 @@ function viewLog(X) {
   const ns = mineOf('systems').length, np = mineOf('planets').length, nf = mineOf('finds').length;
   if (!(ns + np + nf)) {
     out.push(emptyState('Your log is empty', 'Warp somewhere new, then log the system: its star, economy and portal glyphs. Planets and finds go inside it.', S.canWrite ? newBtn('system', 'Log a star system') : ''));
-    out.push(toolsCard());
     if (crew.code) out.push(crewNewSection(X), crewFeed(X));
     return out.join('');
   }
   out.push(`<div class="totals">${[['systems', ns, 'Systems'], ['planets', np, 'Planets'], ['finds', nf, 'Finds']].map(([t, n, l]) => `<button class="total" data-act="tab" data-tab="${t}"><b>${n}</b><span>${l}</span></button>`).join('')}</div>`);
-  out.push(toolsCard());
   if (crew.code) out.push(crewNewSection(X));
   const tagged = [...mineOf('systems').map(v => ['system', v]), ...mineOf('planets').map(v => ['planet', v]), ...mineOf('finds').map(v => ['find', v]), ...mineOf('recipes').map(v => ['recipe', v])];
   const favs = tagged.filter(([, v]) => v.favorite);
@@ -935,7 +936,7 @@ function viewPlanets() {
   if (!S.planets.size) return emptyState('No planets yet', 'Land somewhere and log its biome, weather, sentinels and resources.', S.canWrite ? (S.systems.size ? newBtn('planet', 'Log a planet') : newBtn('system', 'Log a star system first')) : '');
   const q = norm(S.filters.planets);
   const items = sortBy(all('planets').filter(p => !q || plHay(p).includes(q)), S.filters.sort.planets);
-  return finderLink() + `<div class="stack">${sortBar('planets', items.length, 'world')}${items.length ? listOf(items.map(p => planetRow(p))) : noMatch(S.filters.planets.trim())}</div>`;
+  return `<div class="stack">${sortBar('planets', items.length, 'world')}${items.length ? listOf(items.map(p => planetRow(p))) : noMatch(S.filters.planets.trim())}</div>`;
 }
 
 function viewFinds() {
@@ -1096,14 +1097,14 @@ function resourceIndex() {
   return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
 }
 
-// The "Where you are" card at the top of the resource finder and trade routes
-function hereSection(forTrade) {
-  const here = hereInfo();
+// The "Where you are" card at the top of the Tools tab, the resource finder and trade routes
+function hereSection(mode) {
+  const here = hereInfo(), forTrade = mode === 'trade';
   const measured = !!(here && regionOf(here.glyphs));
   const what = forTrade && here ? [here.economy || 'Economy not noted', wealthShort(here.wealth)] : [here && here.galaxy, here && (here.region || (here.glyphs ? groupGlyphs(here.glyphs) : ''))];
   const card = here
     ? `<div class="here">${starDot(here.star)}<div><b>${esc(here.name)}</b><small>${esc(what.filter(Boolean).join(' · ') || 'No galaxy or portal address')}</small></div><button class="btn btn-sm" data-act="here-set">Change</button></div>${measured ? '' : `<p class="hint">This system has no portal address in your log, so distances can’t be worked out. Add its glyphs to see how far away other ${forTrade ? 'systems' : 'planets'} are.</p>`}`
-    : `<div class="here">${kindTile('poi')}<div><b>Not set</b><small>${forTrade ? 'Tell the app to plan a route from here' : 'Tell the app, and the closest planets show first'}</small></div><button class="btn btn-sm btn-primary" data-act="here-set">Set</button></div>`;
+    : `<div class="here">${kindTile('poi')}<div><b>Not set</b><small>${forTrade ? 'Tell the app to plan a route from here' : mode === 'tools' ? 'The resource finder and trade routes use it' : 'Tell the app, and the closest planets show first'}</small></div><button class="btn btn-sm btn-primary" data-act="here-set">Set</button></div>`;
   return section('Where you are', here ? '<button class="link-btn" data-act="here-clear">Clear</button>' : '', card);
 }
 
@@ -1111,7 +1112,7 @@ function viewResources() {
   const g = gate(); if (g) return g;
   const here = hereInfo(), idx = resourceIndex(), out = [];
   const measured = !!(here && regionOf(here.glyphs));
-  out.push(hereSection(false));
+  out.push(hereSection('find'));
   if (!idx.length) {
     out.push(emptyState('No resources logged yet', 'Add the resources you find to your planets, and this page shows where to get each one.', ''));
     return out.join('');
@@ -1258,7 +1259,7 @@ function viewTrade() {
   const g = gate(); if (g) return g;
   const here = hereInfo();
   return [
-    hereSection(true),
+    hereSection('trade'),
     routeSection(here),
     goodsSection(here),
     '<p class="hint">Trade outposts on planets pay more than space stations. Prices go up to +80% to sell and down to −30% to buy. Note both from the Galaxy Map when you log a system, and this page picks the best places for you.</p>',
@@ -2608,7 +2609,7 @@ function renderCrewSettings() {
 
 /* ---------- Updates ---------- */
 // Goes up by one with every release. The app compares it with the copy on the website.
-const APP_VERSION = '11';
+const APP_VERSION = '12';
 const INDEX_URL = new URL('./', location.href).href;
 let lastUpdateCheck = 0, freshIndex = null;
 // Resolves with the website's version number, or null when it couldn't check (offline)
