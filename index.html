@@ -204,6 +204,7 @@ button:disabled{ cursor:default }
 .guide-row em{ margin-left:8px; font-style:normal; font-size:12px; font-weight:700; color:var(--scan) }
 .guide-row.match{ border-color:var(--scan) }
 .guide-row[aria-pressed="true"]{ border-color:var(--flare) }
+.guide-sub{ margin:4px 2px 0; font-family:var(--f-display); font-size:12px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--muted) }
 
 .stats{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; margin:0; background:var(--line-soft); border:1px solid var(--line-soft); border-radius:var(--r-l); overflow:hidden }
 .stats > div{ background:var(--hull); padding:10px 14px; min-width:0 }
@@ -433,6 +434,27 @@ const BIOME_WORDS = [
   ['Waterworld', [], 'Almost all ocean, with little or no land.'],
   ['Gas Giant', ['Gas Giant'], 'A huge planet of swirling, banded gas.'],
 ];
+// What the Galaxy Map says about a system's economy: [app value, words the game shows, note]
+const ECONOMY_WORDS = [
+  ['Trading', ['Trading', 'Mercantile', 'Shipping', 'Commercial']],
+  ['Mining', ['Mining', 'Minerals', 'Ore Extraction', 'Prospecting']],
+  ['Manufacturing', ['Manufacturing', 'Industrial', 'Construction', 'Mass Production']],
+  ['Technology', ['Technology', 'High Tech', 'Nano-construction', 'Engineering']],
+  ['Scientific', ['Scientific', 'Research', 'Experimental', 'Mathematical']],
+  ['Power Generation', ['Power Generation', 'Energy Supply', 'Fuel Generation', 'High Voltage']],
+  ['Advanced Materials', ['Advanced Materials', 'Alchemical', 'Metal Processing', 'Material Fusion']],
+  ['Black Market', ['Black Market', 'Pirate', 'Outlaw', 'Skull'], 'Outlaw (pirate) systems, marked with a skull'],
+  ['None', ['None', 'Abandoned'], 'Abandoned systems with no economy'],
+];
+// [app value, label, words the game shows, note]
+const WEALTH_WORDS = [
+  ['1', '★ Low', ['Declining', 'Destitute', 'Failing', 'Fledgling', 'Low Supply', 'Struggling', 'Unsuccessful', 'Unpromising']],
+  ['2', '★★ Medium', ['Adequate', 'Balanced', 'Comfortable', 'Developing', 'Medium Supply', 'Promising', 'Satisfactory', 'Sustainable']],
+  ['3', '★★★ High', ['Advanced', 'Affluent', 'Booming', 'Flourishing', 'High Supply', 'Opulent', 'Prosperous', 'Wealthy']],
+  ['pirate', 'Pirate controlled', ['Pirate', 'Outlaw', 'Skull', 'Black Market'], 'A skull icon instead of a wealth word'],
+  ['none', 'No economy (abandoned)', ['None', 'Abandoned'], 'Abandoned systems'],
+];
+
 // Biomes whose words appear in what was typed, e.g. "Hiemal Planet" → Frozen
 function biomeMatches(text) {
   const t = ' ' + String(text || '').toLowerCase().replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ') + ' ';
@@ -925,10 +947,11 @@ const SPECS = {
     { k: 'name', t: 'text', label: 'System name', required: true, placeholder: 'As shown in the Discoveries menu' },
     { k: 'starColor', t: 'chips', label: 'Star colour', options: STAR_COLORS, swatch: starVar },
     { row: [ { k: 'galaxy', t: 'text', label: 'Galaxy', list: GALAXIES }, { k: 'starClass', t: 'text', label: 'Spectral class', mono: true, placeholder: 'G2pf' } ] },
-    { k: 'region', t: 'text', label: 'Region', placeholder: 'e.g. Loychazinq Spur' },
+    { k: 'region', t: 'text', label: 'Region', placeholder: 'e.g. Loychazinq Spur', hint: 'Shown on the Galaxy Map. Region names often end in a word like Spur, Expanse, Cluster or Terminus.' },
     { k: 'lifeform', t: 'chips', label: 'Dominant lifeform', options: LIFEFORMS },
     { row: [ { k: 'economy', t: 'select', label: 'Economy', options: ECONOMIES }, { k: 'conflict', t: 'select', label: 'Conflict', options: CONFLICT } ] },
     { k: 'wealth', t: 'select', label: 'Wealth', options: WEALTH },
+    { k: 'econGuide', t: 'econGuide' },
     { k: 'glyphs', t: 'glyphs', label: 'Portal address' },
     { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Station traders, pirates, anything worth remembering' },
     { k: 'photos', t: 'photos', label: 'Screenshots' },
@@ -1019,6 +1042,14 @@ function renderField(f, form) {
     }
     case 'textarea':
       return `<label class="field" for="${id}">${lbl()}<textarea class="input" id="${id}" data-k="${f.k}" rows="4" placeholder="${esc(f.placeholder || '')}" autocapitalize="sentences">${esc(val(d[f.k]))}</textarea>${hint}</label>`;
+    case 'econGuide':
+      return `<details class="guide" id="econ-guide"${form.econGuideOpen ? ' open' : ''}><summary>What do the Galaxy Map words mean?<span class="guide-hint" id="econ-guide-hint">${econHint(form)}</span></summary><div class="guide-body">
+        <p>Open the Galaxy Map and select this system. It shows an economy word and a wealth word. Type one here or find it below, then tap to pick it.</p>
+        <input class="input" id="econ-guide-q" value="${esc(form.econQ || '')}" placeholder="e.g. Opulent or Mercantile" aria-label="A word from the Galaxy Map" autocomplete="off" autocapitalize="words" enterkeyhint="search">
+        <h4 class="guide-sub">Economy</h4><div class="guide-list" id="econ-guide-econ">${econRows(form, 'econ')}</div>
+        <h4 class="guide-sub">Wealth</h4><div class="guide-list" id="econ-guide-wealth">${econRows(form, 'wealth')}</div>
+        <p>For systems you haven't visited, the Galaxy Map only shows these if your ship has the Economy Scanner upgrade.</p>
+      </div></details>`;
     case 'biomeGuide':
       return `<details class="guide" id="biome-guide"${form.guideOpen ? ' open' : ''}><summary>How to tell the biome<span class="guide-hint" id="biome-guide-hint">${guideHint(d)}</span></summary><div class="guide-body">
         <p>Scan the planet from space, or open it in the Discoveries menu. The first word of its type, like “Hiemal Planet”, gives the biome away. Tap a biome to pick it.</p>
@@ -1063,6 +1094,31 @@ function renderField(f, form) {
     }
   }
   return '';
+}
+
+// The economy and wealth guide: rows that match the typed Galaxy Map word light up
+const econMatch = (q, ws) => q.length >= 3 && ws.some(w => { const l = w.toLowerCase(); return l.includes(q) || q.includes(l); });
+const econQ = form => String(form.econQ || '').trim().toLowerCase();
+function econRows(form, kind) {
+  const d = form.draft, q = econQ(form);
+  const rows = kind === 'econ' ? ECONOMY_WORDS.map(([v, ws, note]) => [v, v, ws, note]) : WEALTH_WORDS;
+  const cur = kind === 'econ' ? d.economy : d.wealth;
+  return rows.map(([v, label, ws, note]) => {
+    const m = econMatch(q, ws);
+    const words = note ? note : ws.filter(w => w !== v).join(', ') || ws.join(', ');
+    return `<button type="button" class="guide-row${m ? ' match' : ''}" data-pick-${kind}="${esc(v)}" aria-pressed="${cur === v}"><span><b>${esc(label)}</b>${m ? '<em>matches</em>' : ''}<small>${esc(words)}</small></span></button>`;
+  }).join('');
+}
+function econHint(form) {
+  const q = econQ(form);
+  const hits = [...ECONOMY_WORDS.filter(([, ws]) => econMatch(q, ws)).map(([v]) => v), ...WEALTH_WORDS.filter(([, , ws]) => econMatch(q, ws)).map(([, l]) => l)];
+  return hits.length ? `Matches ${hits.join(', ')}` : '';
+}
+function updateEconGuide(form) {
+  const e = $('#econ-guide-econ'), w = $('#econ-guide-wealth'), h = $('#econ-guide-hint');
+  if (e) e.innerHTML = econRows(form, 'econ');
+  if (w) w.innerHTML = econRows(form, 'wealth');
+  if (h) h.textContent = econHint(form);
 }
 
 function guideHint(d) {
@@ -1465,7 +1521,7 @@ document.addEventListener('click', e => {
 function onSheetClick(e) {
   const t = e.target;
   if (t === sheet) { if (sheetState && sheetState.scrimClose) closeSheet(); return; }
-  const b = t.closest('[data-sheet],[data-sheet-act],[data-chip],[data-multi],[data-multi-add],[data-glyph],[data-photo-remove],[data-pick-biome]');
+  const b = t.closest('[data-sheet],[data-sheet-act],[data-chip],[data-multi],[data-multi-add],[data-glyph],[data-photo-remove],[data-pick-biome],[data-pick-econ],[data-pick-wealth]');
   if (!b || b.disabled) return;
   const ds = b.dataset, form = sheetState && sheetState.form;
   if (ds.sheet === 'cancel') { cancelSheet(); return; }
@@ -1486,6 +1542,8 @@ function onSheetClick(e) {
   }
   if (form && ds.multiAdd) { addCustom(form, ds.multiAdd); return; }
   if (form && ds.pickBiome) { form.draft.biome = ds.pickBiome; refreshSheet(); return; }
+  if (form && ds.pickEcon) { form.draft.economy = ds.pickEcon; refreshSheet(); return; }
+  if (form && ds.pickWealth) { form.draft.wealth = ds.pickWealth; refreshSheet(); return; }
   if (form && ds.glyph) {
     const g = String(form.draft.glyphs || '');
     form.draft.glyphs = ds.glyph === 'del' ? g.slice(0, -1) : (g.length < 12 ? g + ds.glyph : g);
@@ -1563,6 +1621,7 @@ document.addEventListener('input', e => {
     const disp = $('#glyph-display'); if (disp) disp.innerHTML = glyphStrip(v);
     return;
   }
+  if (t.id === 'econ-guide-q') { form.econQ = t.value; updateEconGuide(form); return; }
   if (t.matches('input[data-k], textarea[data-k]')) form.draft[t.dataset.k] = t.value;
   if (t.dataset.k === 'description') updateBiomeGuide(form);
 });
@@ -1610,7 +1669,9 @@ document.addEventListener('keydown', e => {
 
 // The biome guide stays open or closed while the form redraws
 document.addEventListener('toggle', e => {
-  if (e.target && e.target.id === 'biome-guide' && sheetState && sheetState.form) sheetState.form.guideOpen = e.target.open;
+  if (!e.target || !sheetState || !sheetState.form) return;
+  if (e.target.id === 'biome-guide') sheetState.form.guideOpen = e.target.open;
+  if (e.target.id === 'econ-guide') sheetState.form.econGuideOpen = e.target.open;
 }, true);
 
 // A screenshot that fails to load shows an empty tile instead of a broken image
@@ -1993,7 +2054,7 @@ function renderCrewSettings() {
 
 /* ---------- Updates ---------- */
 // Goes up by one with every release. The app compares it with the copy on the website.
-const APP_VERSION = '7';
+const APP_VERSION = '8';
 const INDEX_URL = new URL('./', location.href).href;
 let lastUpdateCheck = 0, freshIndex = null;
 // Resolves with the website's version number, or null when it couldn't check (offline)
