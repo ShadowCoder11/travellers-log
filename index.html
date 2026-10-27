@@ -217,6 +217,17 @@ button:disabled{ cursor:default }
 .fauna{ display:grid; gap:8px; padding:12px 14px; border-radius:var(--r-l); background:var(--hull); border:1px solid var(--line-soft) }
 .fauna-line{ display:flex; justify-content:space-between; gap:12px; font-size:15px }
 .fauna-line b{ font-family:var(--f-mono); font-variant-numeric:tabular-nums }
+.fauna-count{ display:flex; align-items:center; gap:12px }
+.fauna-num{ flex:1; display:grid; justify-items:center; min-width:0 }
+.fauna-num b{ font-family:var(--f-display); font-weight:600; font-size:32px; line-height:1.1; font-variant-numeric:tabular-nums }
+.fauna-num span{ font-size:14px; color:var(--muted) }
+.fauna-num.done span{ color:var(--scan); font-weight:700 }
+.step-btn{ width:52px; height:52px; flex:none; display:grid; place-items:center; border-radius:16px; border:1px solid var(--line); background:var(--hull-2); color:var(--text); cursor:pointer; touch-action:manipulation }
+.step-btn .ic{ width:24px; height:24px; stroke-width:2.4 }
+.step-btn.plus{ background:var(--flare); color:var(--flare-ink); border-color:transparent }
+.step-btn:disabled{ opacity:.35 }
+.step-btn:not(:disabled):active{ transform:scale(.94) }
+.fauna .hint{ margin:0 }
 .meter{ height:6px; border-radius:3px; background:var(--hull-2); overflow:hidden }
 .meter > i{ display:block; height:100%; border-radius:3px; background:var(--scan) }
 .coords{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:var(--r-l); background:var(--hull); border:1px solid var(--line-soft) }
@@ -467,6 +478,7 @@ const COLL = { system:'systems', planet:'planets', find:'finds' };
 const I = {
   back:'<path d="M15 5l-7 7 7 7"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
+  minus:'<path d="M5 12h14"/>',
   sliders:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   star:'<path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
   edit:'<path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/>',
@@ -805,7 +817,6 @@ function viewPlanet(id, X) {
   const p = S.planets.get(id); if (!p) return missing();
   const sys = S.systems.get(p.systemId);
   const finds = X.fp(id).slice().sort(byRecent);
-  const ft = Number(p.faunaTotal) || 0, ff = Math.min(Number(p.faunaFound) || 0, ft || Infinity);
   return [
     `<section class="hero" style="--biome:${biomeColor(p.biome)}"><div class="orb planet${p.body === 'Moon' ? ' moon' : ''}" aria-hidden="true"></div>
       <p class="eyebrow">${esc([p.body || 'Planet', p.biome].filter(Boolean).join(' · '))}</p>
@@ -813,13 +824,47 @@ function viewPlanet(id, X) {
       <div class="crumbs">${sys ? `<button class="crumb" data-act="open" data-type="system" data-id="${esc(sys.id)}">${starDot(sys.starColor)}<span>${esc(sys.name)}</span>${icon('chevron')}</button>` : '<span class="badge">Unknown system</span>'}</div>
       ${heroActions('planet', p)}</section>`,
     statsBlock([['In-game type', p.description], ['Weather', p.weather], ['Sentinels', withTier(SENTINEL_WORDS, p.sentinels)], ['Flora', withTier(FLORA_WORDS, p.flora)], ['Fauna', withTier(FAUNA_WORDS, p.fauna)]]),
-    ft ? section('Fauna discovered', '', `<div class="fauna"><div class="fauna-line"><span>${ff === ft ? 'All creatures found' : 'Creatures found'}</span><b>${ff} / ${ft}</b></div><div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="${ft}" aria-valuenow="${ff}"><i style="width:${Math.round(ff / ft * 100)}%"></i></div></div>`) : '',
+    faunaBlock(p),
     (p.resources || []).length ? section(`Resources<span class="count">${p.resources.length}</span>`, '', `<div class="tags">${p.resources.map(r => `<span class="tag">${esc(r)}</span>`).join('')}</div>`) : '',
     notesBlock(p.notes),
     photosBlock(p.photos),
     section(`Finds<span class="count">${finds.length}</span>`, isMine(p) ? newLink('find', 'Add', { system: p.systemId, planet: id }) : '', finds.length ? listOf(finds.map(f => findRow(f, false))) : `<p class="muted-note">Nothing logged on this ${p.body === 'Moon' ? 'moon' : 'planet'} yet.</p>`),
     metaLine(p),
   ].join('');
+}
+
+// Creatures found, with − and + buttons on your own planets so counting doesn't need Edit
+function faunaBlock(p) {
+  const ft = Number(p.faunaTotal) || 0, ff = Math.min(Number(p.faunaFound) || 0, ft || Infinity);
+  const canCount = isMine(p) && S.canWrite;
+  const noLife = tierOf(FAUNA_WORDS, p.fauna) === 'None';
+  if (!ft && !ff && (noLife || !canCount)) return '';
+  const done = ft > 0 && ff >= ft;
+  const btn = (delta, ic, label, off) => `<button type="button" class="step-btn${delta > 0 ? ' plus' : ''}" data-act="fauna" data-id="${esc(p.id)}" data-delta="${delta}" aria-label="${label}"${off ? ' disabled' : ''}>${icon(ic)}</button>`;
+  const count = `<div class="fauna-num${done ? ' done' : ''}" role="status"><b>${ff}${ft ? ` / ${ft}` : ''}</b><span>${done ? 'All creatures found' : 'creatures found'}</span></div>`;
+  const meter = ft ? `<div class="meter" role="progressbar" aria-label="Creatures found" aria-valuemin="0" aria-valuemax="${ft}" aria-valuenow="${ff}"><i style="width:${Math.round(ff / ft * 100)}%"></i></div>` : '';
+  const hint = canCount && !ft ? '<p class="hint">Add the total from the Discoveries menu in Edit to track your progress.</p>' : '';
+  return `<div id="fauna-block">${section('Fauna discovered', '', `<div class="fauna"><div class="fauna-count">${canCount ? btn(-1, 'minus', 'One fewer creature found', ff <= 0) : ''}${count}${canCount ? btn(1, 'plus', 'One more creature found', done) : ''}</div>${meter}${hint}</div>`)}</div>`;
+}
+async function bumpFauna(id, delta) {
+  const p = S.planets.get(id);
+  if (!isMine(p) || !S.canWrite) return;
+  const total = Number(p.faunaTotal) || 0, was = Number(p.faunaFound) || 0;
+  const n = Math.max(0, total ? Math.min(total, was + delta) : was + delta);
+  if (n === was) return;
+  const next = Object.assign({}, p, { faunaFound: n, updatedAt: new Date().toISOString() });
+  S.planets.set(id, next);
+  // Redraw just the counter, so the rest of the page doesn't flicker on every tap
+  const el = $('#fauna-block');
+  if (el) el.outerHTML = faunaBlock(next); else render();
+  if (total && n === total) toast('All creatures found on this planet!');
+  const body = Object.assign({}, next); delete body.id;
+  try { await S.db.collection('planets').doc(id).set(body); }
+  catch (e) {
+    const cur = S.planets.get(id);
+    if (cur) S.planets.set(id, Object.assign({}, cur, { faunaFound: was }));
+    render(); toast(explain(e));
+  }
 }
 
 function viewFind(id) {
@@ -1399,6 +1444,7 @@ document.addEventListener('click', e => {
     case 'new': openNew(ds.kind, { systemId: ds.system || '', planetId: ds.planet || '' }); break;
     case 'edit': openEdit(ds.type, ds.id); break;
     case 'fav': toggleFav(ds.type, ds.id); break;
+    case 'fauna': bumpFauna(ds.id, Number(ds.delta)); break;
     case 'copy': copyText(ds.text); break;
     case 'photo': openLightbox(ds.pid); break;
     case 'settings': openSettings(); break;
@@ -1938,7 +1984,7 @@ function renderCrewSettings() {
 
 /* ---------- Updates ---------- */
 // Goes up by one with every release. The app compares it with the copy on the website.
-const APP_VERSION = '5';
+const APP_VERSION = '6';
 const INDEX_URL = new URL('./', location.href).href;
 let lastUpdateCheck = 0, freshIndex = null;
 // Resolves with the website's version number, or null when it couldn't check (offline)
