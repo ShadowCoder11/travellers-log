@@ -903,8 +903,13 @@ function openSheet(opts) {
 }
 function refreshSheet() {
   if (!sheetState) return;
-  $('#sheet-body').innerHTML = sheetState.render();
-  hydratePhotos($('#sheet-body'));
+  // Redrawing must not throw you back to the top of the form or of a scrolling list inside it
+  const body = $('#sheet-body');
+  const top = body.scrollTop, boxes = [...body.querySelectorAll('[data-scroll-key]')].map(el => [el.dataset.scrollKey, el.scrollTop]);
+  body.innerHTML = sheetState.render();
+  hydratePhotos(body);
+  body.scrollTop = top;
+  for (const [k, t] of boxes) { const el = body.querySelector(`[data-scroll-key="${k}"]`); if (el) el.scrollTop = t; }
   const save = sheet.querySelector('[data-sheet="save"]'), f = sheetState.form;
   if (save && f) { save.disabled = !!(f.confirmDelete || f.saving); save.textContent = f.saving ? 'Saving…' : 'Save'; }
 }
@@ -1036,7 +1041,7 @@ function renderField(f, form) {
     case 'multi': {
       const sel = new Set(d[f.k] || []);
       const opts = [...new Set([...(d[f.k] || []).filter(x => !f.options.includes(x)), ...f.options])];
-      return `<div class="field" role="group" aria-labelledby="${id}-l"><span class="lbl" id="${id}-l">${esc(f.label)}${sel.size ? ` · ${sel.size} picked` : ''}</span><div class="chip-box"><div class="chips small">${opts.map(o => `<button type="button" class="chip" data-multi="${f.k}" data-v="${esc(o)}" aria-pressed="${sel.has(o)}">${esc(o)}</button>`).join('')}</div></div><div class="add-row"><input class="input" id="${id}-add" placeholder="Add one that isn't listed" aria-label="Add a resource that isn't listed" autocomplete="off" enterkeyhint="done"><button type="button" class="btn" data-multi-add="${f.k}">Add</button></div></div>`;
+      return `<div class="field" role="group" aria-labelledby="${id}-l"><span class="lbl" id="${id}-l">${esc(f.label)}${sel.size ? ` · ${sel.size} picked` : ''}</span><div class="chip-box" data-scroll-key="multi-${f.k}"><div class="chips small">${opts.map(o => `<button type="button" class="chip" data-multi="${f.k}" data-v="${esc(o)}" aria-pressed="${sel.has(o)}">${esc(o)}</button>`).join('')}</div></div><div class="add-row"><input class="input" id="${id}-add" placeholder="Add one that isn't listed" aria-label="Add a resource that isn't listed" autocomplete="off" enterkeyhint="done"><button type="button" class="btn" data-multi-add="${f.k}">Add</button></div></div>`;
     }
     case 'pair':
       return `<div class="field" role="group" aria-labelledby="${id}-l">${lbl(id + '-l')}<div class="pair"><input class="input" type="number" inputmode="numeric" min="0" id="${id}" data-k="${f.k}" value="${esc(val(d[f.k]))}" aria-label="Creatures discovered"><span>of</span><input class="input" type="number" inputmode="numeric" min="0" id="f-${f.k2}" data-k="${f.k2}" value="${esc(val(d[f.k2]))}" aria-label="Creatures on this world"></div>${hint}</div>`;
@@ -1473,7 +1478,11 @@ function onSheetClick(e) {
   if (form && ds.multi) {
     const arr = form.draft[ds.multi] || [];
     form.draft[ds.multi] = arr.includes(ds.v) ? arr.filter(x => x !== ds.v) : [...arr, ds.v];
-    refreshSheet(); return;
+    // Flip just this chip and the "· 3 picked" count, so the list stays exactly where it is
+    b.setAttribute('aria-pressed', String(form.draft[ds.multi].includes(ds.v)));
+    const f = flatFields(SPECS[form.kind]).find(x => x.k === ds.multi), n = form.draft[ds.multi].length, lbl = $(`#f-${ds.multi}-l`);
+    if (lbl && f) lbl.textContent = f.label + (n ? ` · ${n} picked` : '');
+    return;
   }
   if (form && ds.multiAdd) { addCustom(form, ds.multiAdd); return; }
   if (form && ds.pickBiome) { form.draft.biome = ds.pickBiome; refreshSheet(); return; }
@@ -1984,7 +1993,7 @@ function renderCrewSettings() {
 
 /* ---------- Updates ---------- */
 // Goes up by one with every release. The app compares it with the copy on the website.
-const APP_VERSION = '6';
+const APP_VERSION = '7';
 const INDEX_URL = new URL('./', location.href).href;
 let lastUpdateCheck = 0, freshIndex = null;
 // Resolves with the website's version number, or null when it couldn't check (offline)
