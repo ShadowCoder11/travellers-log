@@ -1,7 +1,7 @@
 // Keeps Traveller's Log working offline.
-// Files come from the cache straight away and are refreshed in the background,
-// so a new version of the app shows up the next time it's opened.
-const SHELL = 'tlog-shell-v2';
+// Files come from the cache straight away and are refreshed in the background.
+// The app checks for new versions itself (checkForUpdate in index.html).
+const SHELL = 'tlog-shell-v3';
 const FONTS = 'tlog-fonts-v1';
 const LIBS = 'tlog-libs-v1';
 const SCOPE = self.registration.scope;
@@ -30,9 +30,15 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     if (!url.href.startsWith(SCOPE)) return;
-    // Every page load gets the app's one page
-    const key = req.mode === 'navigate' ? INDEX : req;
-    e.respondWith(cached(e, SHELL, req, key, true));
+    // The app's own update check always goes straight to the server
+    if (url.searchParams.has('update-check')) return;
+    if (req.mode === 'navigate') {
+      // Every page load gets the app's one page. The background refresh asks the server
+      // directly instead of the browser's own 10-minute copy.
+      e.respondWith(cached(e, SHELL, new Request(INDEX, { cache: 'no-cache' }), INDEX, true));
+    } else {
+      e.respondWith(cached(e, SHELL, req, req, true));
+    }
   } else if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
     e.respondWith(cached(e, FONTS, req, req, false));
   } else if (url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/')) {
@@ -41,18 +47,11 @@ self.addEventListener('fetch', e => {
   }
 });
 
-// Two copies of a file are the same version when the server tags them the same
-const tag = r => r.headers.get('etag') || r.headers.get('last-modified') || '';
-
 async function cached(e, name, req, key, ignoreSearch) {
   const cache = await caches.open(name);
   const hit = await cache.match(key, { ignoreSearch });
   const fresh = fetch(req).then(res => {
-    if (res.ok) {
-      // The page just shown was an older version: let the app offer a reload
-      if (hit && key === INDEX && tag(res) && tag(hit) && tag(res) !== tag(hit)) tellUpdate();
-      cache.put(key, res.clone()).catch(() => {});
-    }
+    if (res.ok) cache.put(key, res.clone()).catch(() => {});
     return res;
   });
   if (hit) {
@@ -60,8 +59,4 @@ async function cached(e, name, req, key, ignoreSearch) {
     return hit;
   }
   return fresh;
-}
-
-function tellUpdate() {
-  self.clients.matchAll({ type: 'window' }).then(list => list.forEach(c => c.postMessage('update-ready'))).catch(() => {});
 }

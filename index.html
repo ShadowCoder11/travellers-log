@@ -1234,7 +1234,7 @@ function openAdd() {
 }
 
 /* ---------- Settings: backup, restore, examples, install ---------- */
-const freshSettings = (o = {}) => Object.assign({ restore: null, busy: '', confirmExamples: false, msg: '', backup: null, usage: '', crewMode: '', crewName: crew.name, crewCode: '', crewError: '', crewConfirmLeave: false }, o);
+const freshSettings = (o = {}) => Object.assign({ restore: null, busy: '', confirmExamples: false, msg: '', backup: null, usage: '', crewMode: '', crewName: crew.name, crewCode: '', crewError: '', crewConfirmLeave: false, updateTo: '' }, o);
 function openSettings(opts = {}) {
   S.settings = freshSettings({ confirmExamples: !!opts.examples });
   openSheet({ title: 'Log settings', cancelLabel: 'Close', scrimClose: true, render: renderSettings });
@@ -1261,6 +1261,9 @@ function renderSettings() {
       : `<p>Load a backup file you saved earlier. Backups from the claude.ai version of this log work too, without their screenshots.</p><label class="btn">Choose backup file<input type="file" id="restore-in" class="vh"></label>`}</section>`);
   }
   if (!isStandalone()) out.push(`<section class="set"><h3>Install as an app</h3><p>${installText()}</p>${installEvt ? `<button type="button" class="btn btn-primary" data-sheet-act="install">Install</button>` : ''}</section>`);
+  out.push(`<section class="set"><h3>App version</h3><p>You're on version ${esc(APP_VERSION)}.</p>${st.updateTo
+    ? `<button type="button" class="btn btn-primary" data-sheet-act="apply-update">Update to version ${esc(st.updateTo)}</button>`
+    : `<button type="button" class="btn" data-sheet-act="check-update"${st.busy === 'update' ? ' disabled' : ''}>${st.busy === 'update' ? 'Checking…' : 'Check for updates'}</button>`}</section>`);
   out.push(`<section class="set"><h3>Where your log lives</h3><p>On this device only. Nothing is uploaded anywhere. Deleting the app or clearing this site's data in your browser can erase it, so keep a backup.</p>${st.usage ? `<p class="hint">${esc(st.usage)}</p>` : ''}</section>`);
   return out.join('');
 }
@@ -1401,7 +1404,7 @@ document.addEventListener('click', e => {
     case 'settings': openSettings(); break;
     case 'install': doInstall(); break;
     case 'install-later': dismissInstall(); break;
-    case 'reload': location.reload(); break;
+    case 'reload': applyUpdate(); break;
     case 'remove-examples': openSettings({ examples: true }); break;
     case 'sort': S.filters.sort[ds.list] = ds.sort; render(); break;
     case 'kind': S.filters.findKind = ds.kind; render(); break;
@@ -1469,6 +1472,18 @@ function onSheetClick(e) {
     case 'crew-leave-ask': S.settings.crewConfirmLeave = true; S.settings.crewError = ''; refreshSheet(); break;
     case 'crew-leave-cancel': S.settings.crewConfirmLeave = false; refreshSheet(); break;
     case 'crew-leave-go': leaveCrew(); break;
+    case 'check-update':
+      (async () => {
+        S.settings.busy = 'update'; S.settings.msg = ''; refreshSheet();
+        const v = await checkForUpdate(true);
+        S.settings.busy = '';
+        if (v && v !== APP_VERSION) S.settings.updateTo = v;
+        else S.settings.msg = v ? 'You’re on the latest version.' : 'Couldn’t check for updates. Are you online?';
+        refreshSheet();
+        const b = $('#sheet-body'); if (b && S.settings.msg) b.scrollTop = 0;
+      })();
+      break;
+    case 'apply-update': applyUpdate(); break;
   }
 }
 
@@ -1921,6 +1936,38 @@ function renderCrewSettings() {
   return `<section class="set"><h3>Crew</h3>${intro}${err}<div class="confirm-actions"><button type="button" class="btn btn-primary" data-sheet-act="crew-start">Start a crew</button><button type="button" class="btn" data-sheet-act="crew-join">Join with a code</button></div></section>`;
 }
 
+/* ---------- Updates ---------- */
+// Goes up by one with every release. The app compares it with the copy on the website.
+const APP_VERSION = '5';
+const INDEX_URL = new URL('./', location.href).href;
+let lastUpdateCheck = 0, freshIndex = null;
+// Resolves with the website's version number, or null when it couldn't check (offline)
+async function checkForUpdate(force) {
+  if (!force && Date.now() - lastUpdateCheck < 60000) return null;
+  lastUpdateCheck = Date.now();
+  try {
+    const res = await fetch(INDEX_URL + '?update-check=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const text = await res.text();
+    const m = text.match(/const APP_VERSION = '(\d+)'/);
+    if (!m) return null;
+    if (m[1] !== APP_VERSION) { freshIndex = text; $('#update-bar').hidden = false; }
+    return m[1];
+  } catch (e) { return null; }
+}
+// Puts the new page where the offline copy lives, then restarts the app on it
+async function applyUpdate() {
+  try {
+    if (freshIndex && 'caches' in window) {
+      for (const k of (await caches.keys()).filter(k => k.startsWith('tlog-shell-'))) {
+        const c = await caches.open(k);
+        await c.put(INDEX_URL, new Response(freshIndex, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+      }
+    }
+  } catch (e) {}
+  location.reload();
+}
+
 /* ---------- Installing ---------- */
 const IS_IOS = document.documentElement.classList.contains('ios');
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -1970,9 +2017,11 @@ async function boot() {
 }
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
-  // sw.js says so when it has just downloaded a newer version of the app
-  navigator.serviceWorker.addEventListener('message', e => { if (e.data === 'update-ready') $('#update-bar').hidden = false; });
-  try { navigator.serviceWorker.startMessages(); } catch (e) {}
+}
+if (/^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', () => setTimeout(() => checkForUpdate(true), 2500));
+  // A home-screen app often resumes instead of restarting, so check again when it comes back
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
 }
 boot();
 })();
