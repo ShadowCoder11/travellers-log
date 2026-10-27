@@ -187,6 +187,24 @@ button:disabled{ cursor:default }
 .live-pill{ font-family:var(--f-mono); font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--faint) }
 .live-pill.live{ color:var(--scan) }
 
+/* Biome guide in the planet form */
+.guide{ border:1px solid var(--line-soft); border-radius:var(--r-m); background:var(--hull) }
+.guide > summary{ display:flex; align-items:center; flex-wrap:wrap; gap:4px 10px; min-height:44px; padding:8px 12px; cursor:pointer; list-style:none; color:var(--flare); font-weight:700; font-size:15px }
+.guide > summary::-webkit-details-marker{ display:none }
+.guide > summary::before{ content:""; width:7px; height:7px; border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg); transition:transform .15s; margin-right:2px }
+.guide[open] > summary::before{ transform:rotate(45deg) }
+.guide-hint{ color:var(--scan); font-size:13px; font-weight:700 }
+.guide-body{ display:grid; gap:10px; padding:0 10px 10px }
+.guide-body p{ margin:0 2px; font-size:14px; color:var(--muted) }
+.guide-list{ display:grid; gap:6px }
+.guide-row{ display:flex; align-items:flex-start; gap:10px; width:100%; padding:8px 10px; border-radius:10px; border:1px solid transparent; background:var(--hull-2); color:var(--text); text-align:left; cursor:pointer }
+.guide-row .sw{ flex:none; width:12px; height:12px; margin-top:5px; border-radius:50%; background:var(--sw) }
+.guide-row b{ font-size:15px }
+.guide-row small{ display:block; color:var(--muted); font-size:13px; line-height:1.45 }
+.guide-row em{ margin-left:8px; font-style:normal; font-size:12px; font-weight:700; color:var(--scan) }
+.guide-row.match{ border-color:var(--scan) }
+.guide-row[aria-pressed="true"]{ border-color:var(--flare) }
+
 .stats{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; margin:0; background:var(--line-soft); border:1px solid var(--line-soft); border-radius:var(--r-l); overflow:hidden }
 .stats > div{ background:var(--hull); padding:10px 14px; min-width:0 }
 .stats > div:last-child:nth-child(odd){ grid-column:1 / -1 }
@@ -388,6 +406,28 @@ const WEALTH = [['','Not recorded'],['1','★ Low'],['2','★★ Medium'],['3','
 const CONFLICT = [['','Not recorded'],['1','★ Low'],['2','★★ Medium'],['3','★★★ High']];
 const GALAXIES = ['Euclid','Hilbert Dimension','Calypso','Hesperius Dimension','Hyades','Ickjamatew','Budullangr','Kikolgallr','Eltiensleem','Eissentam'];
 const BIOMES = { Lush:'#5CC46A', Barren:'#C9A26B', Dead:'#8D8A9E', Exotic:'#E36BD3', Frozen:'#9FD8F0', Irradiated:'#B9E04A', Scorched:'#F07A3A', Toxic:'#D8C83A', Marsh:'#6F9E7A', Volcanic:'#E0503A', Waterworld:'#3E8FE0', 'Gas Giant':'#D9B07A', Other:'#A29DC0' };
+// The first word of a planet's in-game type gives away its biome: [biome, words, how to spot it when there are no words]
+const BIOME_WORDS = [
+  ['Lush', ['Paradise', 'Temperate', 'Tropical', 'Verdant', 'Viridescent', 'Flourishing', 'Bountiful', 'Grassy', 'Humid', 'Overgrown', 'Rainy']],
+  ['Barren', ['Barren', 'Desert', 'Dusty', 'Rocky', 'Bleak', 'Desolate', 'Parched', 'Wind-swept']],
+  ['Dead', ['Dead', 'Airless', 'Lifeless', 'Empty', 'Abandoned', 'Forsaken', 'Low Atmosphere', 'Life-Incompatible', 'Terraforming Catastrophe']],
+  ['Frozen', ['Frozen', 'Icy', 'Glacial', 'Arctic', 'Freezing', 'Frostbound', 'Icebound', 'Sub-zero', 'Hiemal', 'Hyperborean']],
+  ['Scorched', ['Scorched', 'Hot', 'Arid', 'Boiling', 'Charred', 'Fiery', 'Scalding', 'Torrid', 'Incandescent', 'High Temperature']],
+  ['Toxic', ['Toxic', 'Caustic', 'Acidic', 'Acrid', 'Blighted', 'Corrosive', 'Noxious', 'Poisonous', 'Rotting', 'Miasmatic']],
+  ['Irradiated', ['Radioactive', 'Irradiated', 'Nuclear', 'Isotopic', 'Contaminated', 'Supercritical', 'High Energy', 'Gamma-Intensive', 'High Radio Source', 'Decaying Nuclear']],
+  ['Volcanic', ['Volcanic', 'Lava', 'Magma', 'Molten', 'Erupting', 'Ashen', 'Ash-Shrouded', 'Basalt', 'Tectonic', 'Unstable', 'Violent', 'Flame-Ruptured', 'Obsidian Bead', 'Imminent Core Detonation']],
+  ['Marsh', ['Swamp', 'Marshy', 'Boggy', 'Damp', 'Foggy', 'Misty', 'Murky', 'Hazy', 'Cloudy', 'Vapour', 'Quagmire', 'Reeking', 'Endless Morass', 'Tropical']],
+  ['Exotic', ['Bubbling', 'Foaming', 'Frothing', 'Hexagonal', 'Plated', 'Scaly', 'Skeletal', 'Spined', 'Rattling', 'Shattered', 'Fractured', 'Fragmented', 'Columned', 'Pillared', 'Sharded', 'Fungal', 'Capped', 'Sporal', 'Calcified', 'Ossified', 'Petrified', 'Mechanical', 'Metallic', 'Metallurgic', 'Cabled', 'Contoured', 'Webbed', 'Bladed', 'Finned', 'Shell-Strewn', 'Fissured', 'Breached', 'of Light', 'Glassy', 'Erased', 'Malfunctioning', 'Temporary', 'Thirsty', 'Doomed', 'Corrupted', 'Infected',
+    'Azure', 'Cerulean', 'Ultramarine', 'Crimson', 'Scarlet', 'Blood', 'Vermillion Globe', 'Wine Dark', 'Lost Blue', 'Lost Green', 'Lost Red', 'Doomed Jade', 'Haunted Emeril', 'Harsh Blue Globe', 'Chromatic Fog', 'Planetary Anomaly', 'Frozen Anomaly', 'Toxic Anomaly', 'Vile Anomaly', 'Deathly Green Anomaly', 'Stellar Corruption Detected']],
+  ['Waterworld', [], 'Almost all ocean, with little or no land.'],
+  ['Gas Giant', ['Gas Giant'], 'A huge planet of swirling, banded gas.'],
+];
+// Biomes whose words appear in what was typed, e.g. "Hiemal Planet" → Frozen
+function biomeMatches(text) {
+  const t = ' ' + String(text || '').toLowerCase().replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ') + ' ';
+  if (!t.trim()) return [];
+  return BIOME_WORDS.filter(([, ws]) => ws.some(w => t.includes(' ' + w.toLowerCase() + ' '))).map(([b]) => b);
+}
 const PLANET_TYPES = ['Paradise Planet','Temperate Planet','Tropical Planet','Lush Planet','Frozen Planet','Icy Planet','Toxic Planet','Caustic World','Radioactive Planet','Scorched Planet','Desert Planet','Dead Planet','Airless Planet','Bubbling Planet','Glassy Planet','Gas Giant'];
 const WEATHER = ['Clear skies','Mild rain','Humid','Heavy rain','Freezing','Blizzards','Scorching','Firestorms','Toxic rain','Radioactive storms','Dust storms','Superheated storms','No atmosphere'];
 // The words a planet's Discoveries entry uses, grouped by what they mean: [level, heading, words]
@@ -848,6 +888,7 @@ const SPECS = {
     { k: 'name', t: 'text', label: 'Name', required: true, placeholder: 'As shown in the Discoveries menu' },
     { k: 'body', t: 'chips', label: 'Body', options: ['Planet', 'Moon'], noClear: true },
     { k: 'biome', t: 'chips', label: 'Biome', options: Object.keys(BIOMES), swatch: biomeColor },
+    { k: 'biomeGuide', t: 'biomeGuide' },
     { row: [ { k: 'description', t: 'text', label: 'In-game type', list: PLANET_TYPES, placeholder: 'Paradise Planet' }, { k: 'weather', t: 'text', label: 'Weather', list: WEATHER } ] },
     { k: 'sentinels', t: 'words', label: 'Sentinels', groups: SENTINEL_WORDS, hint: 'Pick the word the game shows. The list runs from no sentinels to corrupted ones.' },
     { row: [ { k: 'flora', t: 'words', label: 'Flora', groups: FLORA_WORDS }, { k: 'fauna', t: 'words', label: 'Fauna', groups: FAUNA_WORDS } ] },
@@ -928,6 +969,12 @@ function renderField(f, form) {
     }
     case 'textarea':
       return `<label class="field" for="${id}">${lbl()}<textarea class="input" id="${id}" data-k="${f.k}" rows="4" placeholder="${esc(f.placeholder || '')}" autocapitalize="sentences">${esc(val(d[f.k]))}</textarea>${hint}</label>`;
+    case 'biomeGuide':
+      return `<details class="guide" id="biome-guide"${form.guideOpen ? ' open' : ''}><summary>How to tell the biome<span class="guide-hint" id="biome-guide-hint">${guideHint(d)}</span></summary><div class="guide-body">
+        <p>Scan the planet from space, or open it in the Discoveries menu. The first word of its type, like “Hiemal Planet”, gives the biome away. Tap a biome to pick it.</p>
+        <div class="guide-list" id="biome-guide-list">${guideList(d)}</div>
+        <p>“Paradise” is a Lush world with calm weather and few sentinels. “Tropical” can be Lush or Marsh: pick Marsh if it’s foggy or swampy. Colour names like Crimson or Azure are Exotic.</p>
+      </div></details>`;
     case 'words': {
       // Grouped dropdown of the game's own words, plus a box for anything not on the list
       const v = val(d[f.k]);
@@ -966,6 +1013,21 @@ function renderField(f, form) {
     }
   }
   return '';
+}
+
+function guideHint(d) {
+  const m = biomeMatches(d.description);
+  return m.length ? `Your type says ${m.join(' or ')}` : '';
+}
+function guideList(d) {
+  const m = biomeMatches(d.description);
+  return BIOME_WORDS.map(([b, ws, note]) => `<button type="button" class="guide-row${m.includes(b) ? ' match' : ''}" data-pick-biome="${esc(b)}" aria-pressed="${d.biome === b}"><span class="sw" style="--sw:${biomeColor(b)}"></span><span><b>${esc(b)}</b>${m.includes(b) ? '<em>matches your type</em>' : ''}<small>${esc(note || ws.join(', '))}</small></span></button>`).join('');
+}
+// Typing the in-game type re-highlights the guide without redrawing the whole form
+function updateBiomeGuide(form) {
+  const list = $('#biome-guide-list'), hint = $('#biome-guide-hint');
+  if (list) list.innerHTML = guideList(form.draft);
+  if (hint) hint.textContent = guideHint(form.draft);
 }
 
 function updateGlyphField(form) {
@@ -1349,7 +1411,7 @@ document.addEventListener('click', e => {
 function onSheetClick(e) {
   const t = e.target;
   if (t === sheet) { if (sheetState && sheetState.scrimClose) closeSheet(); return; }
-  const b = t.closest('[data-sheet],[data-sheet-act],[data-chip],[data-multi],[data-multi-add],[data-glyph],[data-photo-remove]');
+  const b = t.closest('[data-sheet],[data-sheet-act],[data-chip],[data-multi],[data-multi-add],[data-glyph],[data-photo-remove],[data-pick-biome]');
   if (!b || b.disabled) return;
   const ds = b.dataset, form = sheetState && sheetState.form;
   if (ds.sheet === 'cancel') { cancelSheet(); return; }
@@ -1365,6 +1427,7 @@ function onSheetClick(e) {
     refreshSheet(); return;
   }
   if (form && ds.multiAdd) { addCustom(form, ds.multiAdd); return; }
+  if (form && ds.pickBiome) { form.draft.biome = ds.pickBiome; refreshSheet(); return; }
   if (form && ds.glyph) {
     const g = String(form.draft.glyphs || '');
     form.draft.glyphs = ds.glyph === 'del' ? g.slice(0, -1) : (g.length < 12 ? g + ds.glyph : g);
@@ -1431,6 +1494,7 @@ document.addEventListener('input', e => {
     return;
   }
   if (t.matches('input[data-k], textarea[data-k]')) form.draft[t.dataset.k] = t.value;
+  if (t.dataset.k === 'description') updateBiomeGuide(form);
 });
 
 document.addEventListener('change', e => {
@@ -1473,6 +1537,11 @@ document.addEventListener('keydown', e => {
     if (form) addCustom(form, e.target.id.slice(2, -4));
   }
 });
+
+// The biome guide stays open or closed while the form redraws
+document.addEventListener('toggle', e => {
+  if (e.target && e.target.id === 'biome-guide' && sheetState && sheetState.form) sheetState.form.guideOpen = e.target.open;
+}, true);
 
 // A screenshot that fails to load shows an empty tile instead of a broken image
 document.addEventListener('error', e => {
