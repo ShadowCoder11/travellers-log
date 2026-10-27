@@ -446,6 +446,8 @@ const ECONOMY_WORDS = [
   ['Black Market', ['Black Market', 'Pirate', 'Outlaw', 'Skull'], 'Outlaw (pirate) systems, marked with a skull'],
   ['None', ['None', 'Abandoned'], 'Abandoned systems with no economy'],
 ];
+// The Economy dropdown: every word the Galaxy Map uses, grouped by economy type
+const ECON_GROUPS = ECONOMY_WORDS.map(([v, ws]) => [v, v, v === 'Black Market' || v === 'None' ? [v] : ws]);
 // [app value, label, words the game shows, note]
 const WEALTH_WORDS = [
   ['1', '★ Low', ['Declining', 'Destitute', 'Failing', 'Fledgling', 'Low Supply', 'Struggling', 'Unsuccessful', 'Unpromising']],
@@ -484,11 +486,12 @@ const tierOf = (groups, w) => { const g = w && groups.find(x => x[2].includes(w)
 // "Spread Thin (low)", so the game's odder words still say how much there is
 const withTier = (groups, w) => { const t = tierOf(groups, w); return t && t !== w ? `${w} (${t.toLowerCase()})` : (w || ''); };
 const RESOURCES = ['Carbon','Ferrite Dust','Pure Ferrite','Magnetised Ferrite','Oxygen','Sodium','Di-hydrogen','Cobalt','Chlorine','Salt','Copper','Cadmium','Emeril','Indium','Activated Copper','Activated Cadmium','Activated Emeril','Activated Indium','Paraffinium','Pyrite','Ammonia','Uranium','Dioxite','Phosphorus','Silver','Gold','Platinum','Star Bulb','Gamma Root','Cactus Flesh','Frost Crystal','Fungal Mould','Solanium','Mordite','Rusted Metal','Ancient Bones','Storm Crystals','Salvageable Scrap','Kelp Sac','Cyto-Phosphate','Marrow Bulb','Sac Venom'];
-const FIND_KINDS = [['creature','Creature'],['plant','Plant'],['mineral','Mineral'],['ship','Starship'],['tool','Multi-tool'],['base','Base'],['poi','Point of interest'],['other','Other']];
+const FIND_KINDS = [['creature','Creature'],['plant','Plant'],['mineral','Mineral'],['ship','Starship'],['fleet','My ship'],['tool','Multi-tool'],['base','Base'],['poi','Point of interest'],['other','Other']];
 const KIND_LABEL = Object.fromEntries(FIND_KINDS);
 const SUBTYPES = {
   creature:['Herbivore','Carnivore','Predator','Flying','Underwater','Underground','Exotic'],
   ship:['Fighter','Hauler','Explorer','Shuttle','Exotic','Solar','Living Ship','Sentinel Interceptor','Corvette'],
+  fleet:['Fighter','Hauler','Explorer','Shuttle','Exotic','Solar','Living Ship','Sentinel Interceptor','Corvette'],
   tool:['Pistol','Rifle','Experimental','Alien','Royal','Atlantid','Sentinel','Staff'],
   base:['Home base','Outpost','Farm','Freighter base'],
   poi:['Ancient ruin','Crashed freighter','Crashed starship','Abandoned building','Portal','Monolith','Trading post','Settlement','Derelict freighter','Distress signal'],
@@ -518,6 +521,7 @@ const I = {
   plant:'<path d="M5 19C5 10.5 10 5 19 5c0 9-5 14-14 14zM5 19l8.5-8.5"/>',
   mineral:'<path d="M12 3l5.5 6.5L12 21 6.5 9.5zM6.5 9.5h11M12 3v18"/>',
   ship:'<path d="M12 3l2.6 7.6 6.4 3.2v2.1l-6.2-1.1-1 4.2h-3.6l-1-4.2L3 16v-2.1l6.4-3.2z"/>',
+  fleet:'<path d="M12 3l2.6 7.6 6.4 3.2v2.1l-6.2-1.1-1 4.2h-3.6l-1-4.2L3 16v-2.1l6.4-3.2z"/>',
   tool:'<path d="M3 8.5h13l2-2h3v5h-5l-2 2v5.5H10l1-5.5H3z"/>',
   base:'<path d="M4 11l8-6.2 8 6.2v9H4zM10 20v-5.2h4V20"/>',
   poi:'<path d="M12 21s-6.5-5.6-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.3"/>',
@@ -562,7 +566,7 @@ const starVar = c => STAR_COLORS.includes(c) ? `var(--star-${c.toLowerCase()})` 
 const biomeColor = b => Object.prototype.hasOwnProperty.call(BIOMES, b) ? BIOMES[b] : BIOMES.Other;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const hay = (...xs) => xs.flat().filter(Boolean).join(' ').toLowerCase();
-const sysHay = s => hay(s.name, s.galaxy, s.region, s.starColor, s.starClass, s.lifeform, s.economy, s.notes, s.glyphs);
+const sysHay = s => hay(s.name, s.galaxy, s.region, s.starColor, s.starClass, s.lifeform, s.economy, tierOf(ECON_GROUPS, s.economy), s.notes, s.glyphs);
 const plHay = p => hay(p.name, p.body, p.biome, p.description, p.weather, p.sentinels, tierOf(SENTINEL_WORDS, p.sentinels), p.flora, p.fauna, p.resources, p.notes);
 const fdHay = f => hay(f.name, KIND_LABEL[f.kind], f.subtype, f.cls ? f.cls + '-class' : '', f.coords, f.notes);
 const exampleCount = () => ['systems', 'planets', 'finds'].reduce((n, c) => n + all(c).filter(x => x.example).length, 0);
@@ -661,7 +665,7 @@ function gate() {
 const section = (title, action, content) => `<section class="section"><div class="section-head"><h3>${title}</h3>${action || ''}</div>${content}</section>`;
 const listOf = rows => `<div class="list">${rows.join('')}</div>`;
 const newBtn = (kind, label, ctx = {}) => `<button class="btn btn-primary" data-act="new" data-kind="${kind}" data-system="${esc(ctx.system || '')}" data-planet="${esc(ctx.planet || '')}">${icon('plus')}${esc(label)}</button>`;
-const newLink = (kind, label, ctx = {}) => `<button class="link-btn" data-act="new" data-kind="${kind}" data-system="${esc(ctx.system || '')}" data-planet="${esc(ctx.planet || '')}">${icon('plus')}${esc(label)}</button>`;
+const newLink = (kind, label, ctx = {}) => `<button class="link-btn" data-act="new" data-kind="${kind}" data-system="${esc(ctx.system || '')}" data-planet="${esc(ctx.planet || '')}" data-find-kind="${esc(ctx.findKind || '')}">${icon('plus')}${esc(label)}</button>`;
 const emptyState = (title, text, action) => `<div class="empty"><h3>${esc(title)}</h3><p>${esc(text)}</p>${action || ''}</div>`;
 const noMatch = q => `<p class="muted-note">Nothing matches “${esc(q)}”.</p>`;
 const starDot = (color, extra = '') => `<span class="star-dot${extra}" style="--star:${starVar(color)}" aria-hidden="true"></span>`;
@@ -692,7 +696,7 @@ function findWhere(f) {
 }
 function findRow(f, showWhere = true) {
   const kl = KIND_LABEL[f.kind] || 'Find';
-  const sub = [kl, f.subtype && f.subtype !== kl ? f.subtype : '', showWhere ? findWhere(f) : ''].filter(Boolean).join(' · ');
+  const sub = [kl, f.subtype && f.subtype !== kl ? f.subtype : '', showWhere && f.kind !== 'fleet' ? findWhere(f) : ''].filter(Boolean).join(' · ');
   const cls = f.cls ? `<span class="badge badge-cls${f.cls === 'S' ? ' s' : ''}">${esc(f.cls)}</span>` : '';
   return `<button class="row" data-act="open" data-type="find" data-id="${esc(f.id)}">${kindTile(f.kind)}<span class="row-main"><span class="row-title">${esc(f.name || 'Unnamed find')}</span><span class="row-sub">${esc(sub)}</span></span>${rowEnd(f, cls)}</button>`;
 }
@@ -805,14 +809,20 @@ function viewPlanets() {
 
 function viewFinds() {
   const g = gate(); if (g) return g;
-  if (!S.finds.size) return emptyState('No finds yet', 'Log creatures, plants, starships, multi-tools, bases and anything else worth coming back for.', S.canWrite ? (S.systems.size ? newBtn('find', 'Log a find') : newBtn('system', 'Log a star system first')) : '');
+  const q = norm(S.filters.finds);
+  // Your freighter's ships are only ever yours: they're never shared with a crew
+  const fleet = sortBy(all('finds').filter(f => f.kind === 'fleet' && isMine(f) && (!q || fdHay(f).includes(q))), S.filters.sort.finds);
+  const fleetSec = section(`My freighter<span class="count">${fleet.length}</span>`, S.canWrite ? newLink('find', 'Add', { findKind: 'fleet' }) : '',
+    fleet.length ? listOf(fleet.map(f => findRow(f))) : `<p class="muted-note">${q ? 'No ships match.' : 'List the starships and corvettes in your freighter. Only you see these, even in a crew.'}</p>`);
+  const finds = all('finds').filter(f => f.kind !== 'fleet');
+  if (!finds.length) return fleetSec + emptyState('No finds yet', 'Log creatures, plants, starships, multi-tools, bases and anything else worth coming back for.', S.canWrite ? (mineOf('systems').length ? newBtn('find', 'Log a find') : newBtn('system', 'Log a star system first')) : '');
   const counts = {};
-  for (const f of S.finds.values()) counts[f.kind] = (counts[f.kind] || 0) + 1;
+  for (const f of finds) counts[f.kind] = (counts[f.kind] || 0) + 1;
   if (S.filters.findKind !== 'all' && !counts[S.filters.findKind]) S.filters.findKind = 'all';
-  const kind = S.filters.findKind, q = norm(S.filters.finds);
-  const chips = `<div class="chips scroll" role="group" aria-label="Show only one kind"><button class="chip" data-act="kind" data-kind="all" aria-pressed="${kind === 'all'}">All <span class="n">${S.finds.size}</span></button>${FIND_KINDS.filter(([k]) => counts[k]).map(([k, l]) => `<button class="chip" data-act="kind" data-kind="${k}" aria-pressed="${kind === k}">${l} <span class="n">${counts[k]}</span></button>`).join('')}</div>`;
-  const items = sortBy(all('finds').filter(f => (kind === 'all' || f.kind === kind) && (!q || fdHay(f).includes(q))), S.filters.sort.finds);
-  return chips + `<div class="stack">${sortBar('finds', items.length, 'find')}${items.length ? listOf(items.map(f => findRow(f))) : noMatch(S.filters.finds.trim() || KIND_LABEL[kind])}</div>`;
+  const kind = S.filters.findKind;
+  const chips = `<div class="chips scroll" role="group" aria-label="Show only one kind"><button class="chip" data-act="kind" data-kind="all" aria-pressed="${kind === 'all'}">All <span class="n">${finds.length}</span></button>${FIND_KINDS.filter(([k]) => counts[k]).map(([k, l]) => `<button class="chip" data-act="kind" data-kind="${k}" aria-pressed="${kind === k}">${l} <span class="n">${counts[k]}</span></button>`).join('')}</div>`;
+  const items = sortBy(finds.filter(f => (kind === 'all' || f.kind === kind) && (!q || fdHay(f).includes(q))), S.filters.sort.finds);
+  return fleetSec + section('Finds', '', chips + `<div class="stack">${sortBar('finds', items.length, 'find')}${items.length ? listOf(items.map(f => findRow(f))) : noMatch(S.filters.finds.trim() || KIND_LABEL[kind])}</div>`);
 }
 
 function viewSystem(id, X) {
@@ -826,7 +836,7 @@ function viewSystem(id, X) {
       ${s.region ? `<p class="hero-sub">${esc(s.region)}</p>` : ''}
       ${heroActions('system', s)}</section>`,
     s.glyphs ? section('Portal address', '', `<div class="stack">${glyphStrip(s.glyphs)}<div class="glyph-code"><span class="mono">${esc(groupGlyphs(s.glyphs))}</span><button class="link-btn" data-act="copy" data-text="${esc(s.glyphs)}">Copy code</button></div></div>`) : '',
-    statsBlock([['Spectral class', s.starClass, 'mono'], ['Lifeform', s.lifeform], ['Economy', s.economy], ['Wealth', labelOf(WEALTH, s.wealth)], ['Conflict', labelOf(CONFLICT, s.conflict)]]),
+    statsBlock([['Spectral class', s.starClass, 'mono'], ['Lifeform', s.lifeform], ['Economy', withTier(ECON_GROUPS, s.economy)], ['Wealth', labelOf(WEALTH, s.wealth)], ['Conflict', labelOf(CONFLICT, s.conflict)]]),
     notesBlock(s.notes),
     photosBlock(s.photos),
     section(`Planets & moons<span class="count">${planets.length}</span>`, isMine(s) ? newLink('planet', 'Add', { system: id }) : '', planets.length ? listOf(planets.map(p => planetRow(p, false))) : '<p class="muted-note">No planets logged in this system yet.</p>'),
@@ -858,28 +868,31 @@ function viewPlanet(id, X) {
 // Creatures found, with − and + buttons on your own planets so counting doesn't need Edit
 function faunaBlock(p) {
   const ft = Number(p.faunaTotal) || 0, ff = Math.min(Number(p.faunaFound) || 0, ft || Infinity);
-  const canCount = isMine(p) && S.canWrite;
+  // Everyone counts for themselves: on a crewmate's planet this is your own count
+  const canCount = S.canWrite, by = isMine(p) ? '' : ' by you';
   const noLife = tierOf(FAUNA_WORDS, p.fauna) === 'None';
   if (!ft && !ff && (noLife || !canCount)) return '';
   const done = ft > 0 && ff >= ft;
   const btn = (delta, ic, label, off) => `<button type="button" class="step-btn${delta > 0 ? ' plus' : ''}" data-act="fauna" data-id="${esc(p.id)}" data-delta="${delta}" aria-label="${label}"${off ? ' disabled' : ''}>${icon(ic)}</button>`;
-  const count = `<div class="fauna-num${done ? ' done' : ''}" role="status"><b>${ff}${ft ? ` / ${ft}` : ''}</b><span>${done ? 'All creatures found' : 'creatures found'}</span></div>`;
+  const count = `<div class="fauna-num${done ? ' done' : ''}" role="status"><b>${ff}${ft ? ` / ${ft}` : ''}</b><span>${done ? `All creatures found${by}` : `creatures found${by}`}</span></div>`;
   const meter = ft ? `<div class="meter" role="progressbar" aria-label="Creatures found" aria-valuemin="0" aria-valuemax="${ft}" aria-valuenow="${ff}"><i style="width:${Math.round(ff / ft * 100)}%"></i></div>` : '';
-  const hint = canCount && !ft ? '<p class="hint">Add the total from the Discoveries menu in Edit to track your progress.</p>' : '';
+  const hint = isMine(p) && canCount && !ft ? '<p class="hint">Add the total from the Discoveries menu in Edit to track your progress.</p>' : '';
   return `<div id="fauna-block">${section('Fauna discovered', '', `<div class="fauna"><div class="fauna-count">${canCount ? btn(-1, 'minus', 'One fewer creature found', ff <= 0) : ''}${count}${canCount ? btn(1, 'plus', 'One more creature found', done) : ''}</div>${meter}${hint}</div>`)}</div>`;
 }
 async function bumpFauna(id, delta) {
   const p = S.planets.get(id);
-  if (!isMine(p) || !S.canWrite) return;
+  if (!p || !S.canWrite) return;
   const total = Number(p.faunaTotal) || 0, was = Number(p.faunaFound) || 0;
   const n = Math.max(0, total ? Math.min(total, was + delta) : was + delta);
   if (n === was) return;
-  const next = Object.assign({}, p, { faunaFound: n, updatedAt: new Date().toISOString() });
+  const next = Object.assign({}, p, { faunaFound: n }, p._crew ? {} : { updatedAt: new Date().toISOString() });
   S.planets.set(id, next);
   // Redraw just the counter, so the rest of the page doesn't flicker on every tap
   const el = $('#fauna-block');
   if (el) el.outerHTML = faunaBlock(next); else render();
   if (total && n === total) toast('All creatures found on this planet!');
+  // A crewmate's planet: the count is yours alone and stays on this phone
+  if (p._crew) { myFauna.set(id, n); saveMyFauna(); return; }
   const body = Object.assign({}, next); delete body.id;
   try { await S.db.collection('planets').doc(id).set(body); }
   catch (e) {
@@ -897,7 +910,7 @@ function viewFind(id) {
     `<section class="hero">${kindTile(f.kind, ' xl')}
       <p class="eyebrow">${esc([kl, f.subtype && f.subtype !== kl ? f.subtype : ''].filter(Boolean).join(' · '))}</p>
       <h2>${esc(f.name || 'Unnamed find')}</h2>
-      <div class="crumbs">
+      <div class="crumbs"${f.kind === 'fleet' ? ' hidden' : ''}>
         ${pl ? `<button class="crumb" data-act="open" data-type="planet" data-id="${esc(pl.id)}">${planetDisc(pl)}<span>${esc(pl.name)}</span>${icon('chevron')}</button>` : ''}
         ${sys ? `<button class="crumb" data-act="open" data-type="system" data-id="${esc(sys.id)}">${starDot(sys.starColor)}<span>${esc(sys.name)}${pl ? '' : ', in space'}</span>${icon('chevron')}</button>` : '<span class="badge">Unknown system</span>'}
       </div>
@@ -949,7 +962,7 @@ const SPECS = {
     { row: [ { k: 'galaxy', t: 'text', label: 'Galaxy', list: GALAXIES }, { k: 'starClass', t: 'text', label: 'Spectral class', mono: true, placeholder: 'G2pf' } ] },
     { k: 'region', t: 'text', label: 'Region', placeholder: 'e.g. Loychazinq Spur', hint: 'Shown on the Galaxy Map. Region names often end in a word like Spur, Expanse, Cluster or Terminus.' },
     { k: 'lifeform', t: 'chips', label: 'Dominant lifeform', options: LIFEFORMS },
-    { row: [ { k: 'economy', t: 'select', label: 'Economy', options: ECONOMIES }, { k: 'conflict', t: 'select', label: 'Conflict', options: CONFLICT } ] },
+    { row: [ { k: 'economy', t: 'words', label: 'Economy', groups: ECON_GROUPS }, { k: 'conflict', t: 'select', label: 'Conflict', options: CONFLICT } ] },
     { k: 'wealth', t: 'select', label: 'Wealth', options: WEALTH },
     { k: 'econGuide', t: 'econGuide' },
     { k: 'glyphs', t: 'glyphs', label: 'Portal address' },
@@ -960,9 +973,9 @@ const SPECS = {
     { k: 'systemId', t: 'system', label: 'Star system', required: true },
     { k: 'name', t: 'text', label: 'Name', required: true, placeholder: 'As shown in the Discoveries menu' },
     { k: 'body', t: 'chips', label: 'Body', options: ['Planet', 'Moon'], noClear: true },
+    { row: [ { k: 'description', t: 'text', label: 'In-game type', list: PLANET_TYPES, placeholder: 'Paradise Planet' }, { k: 'weather', t: 'text', label: 'Weather', list: WEATHER } ] },
     { k: 'biome', t: 'chips', label: 'Biome', options: Object.keys(BIOMES), swatch: biomeColor },
     { k: 'biomeGuide', t: 'biomeGuide' },
-    { row: [ { k: 'description', t: 'text', label: 'In-game type', list: PLANET_TYPES, placeholder: 'Paradise Planet' }, { k: 'weather', t: 'text', label: 'Weather', list: WEATHER } ] },
     { k: 'sentinels', t: 'words', label: 'Sentinels', groups: SENTINEL_WORDS, hint: 'Pick the word the game shows. The list runs from no sentinels to corrupted ones.' },
     { row: [ { k: 'flora', t: 'words', label: 'Flora', groups: FLORA_WORDS }, { k: 'fauna', t: 'words', label: 'Fauna', groups: FAUNA_WORDS } ] },
     { k: 'faunaFound', k2: 'faunaTotal', t: 'pair', label: 'Fauna discovered', hint: 'From the Discoveries menu, for example 5 of 8.' },
@@ -973,11 +986,11 @@ const SPECS = {
   find: { coll: 'finds', noun: 'find', fields: [
     { k: 'kind', t: 'chips', label: 'What is it?', options: FIND_KINDS, noClear: true },
     { k: 'name', t: 'text', label: 'Name', required: true },
-    { k: 'systemId', t: 'system', label: 'Star system', required: true },
-    { k: 'planetId', t: 'planet', label: 'Planet or moon' },
-    { k: 'cls', t: 'chips', label: 'Class', options: ['S', 'A', 'B', 'C'], showIf: d => d.kind === 'ship' || d.kind === 'tool' },
+    { k: 'systemId', t: 'system', label: 'Star system', required: true, showIf: d => d.kind !== 'fleet' },
+    { k: 'planetId', t: 'planet', label: 'Planet or moon', showIf: d => d.kind !== 'fleet' },
+    { k: 'cls', t: 'chips', label: 'Class', options: ['S', 'A', 'B', 'C'], showIf: d => ['ship', 'tool', 'fleet'].includes(d.kind) },
     { k: 'subtype', t: 'text', label: 'Type', listFn: d => SUBTYPES[d.kind] || [], showIf: d => !!SUBTYPES[d.kind] },
-    { k: 'coords', t: 'text', label: 'Planetary coordinates', mono: true, placeholder: '+12.40, -56.81', showIf: d => !!d.planetId },
+    { k: 'coords', t: 'text', label: 'Planetary coordinates', mono: true, placeholder: '+12.40, -56.81', showIf: d => !!d.planetId && d.kind !== 'fleet' },
     { k: 'notes', t: 'textarea', label: 'Notes', placeholder: 'Price, behaviour, what it drops, how to get there' },
     { k: 'photos', t: 'photos', label: 'Screenshots' },
   ] },
@@ -993,7 +1006,7 @@ function blankDraft(kind, ctx) {
   if (!systemId && rs) systemId = rs.id;
   if (kind === 'system') return { name: '', galaxy: rs ? rs.galaxy || 'Euclid' : 'Euclid', region: '', starColor: '', starClass: '', lifeform: '', economy: '', wealth: '', conflict: '', glyphs: '', notes: '', photos: [], favorite: false };
   if (kind === 'planet') return { systemId, name: '', body: 'Planet', biome: '', description: '', weather: '', sentinels: '', flora: '', fauna: '', faunaFound: '', faunaTotal: '', resources: [], notes: '', photos: [], favorite: false };
-  return { kind: 'creature', name: '', systemId, planetId: ctx.planetId || '', cls: '', subtype: '', coords: '', notes: '', photos: [], favorite: false };
+  return { kind: ctx.kind || 'creature', name: '', systemId, planetId: ctx.planetId || '', cls: '', subtype: '', coords: '', notes: '', photos: [], favorite: false };
 }
 
 function openForm(kind, existing, ctx) {
@@ -1007,7 +1020,7 @@ function openForm(kind, existing, ctx) {
 }
 function openNew(kind, ctx) {
   if (!S.canWrite || S.status !== 'ready') return;
-  if (kind !== 'system' && !mineOf('systems').length) kind = 'system';
+  if (kind !== 'system' && !(ctx && ctx.kind === 'fleet') && !mineOf('systems').length) kind = 'system';
   // New entries only go inside your own systems and planets, never a crewmate's
   ctx = Object.assign({}, ctx);
   if (ctx.systemId && !isMine(S.systems.get(ctx.systemId))) ctx.systemId = '';
@@ -1170,7 +1183,11 @@ function normalize(kind, d) {
   const toNum = v => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 ? n : null; };
   if (kind === 'system') o.glyphs = String(o.glyphs || '').toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
   if (kind === 'planet') { o.faunaFound = toNum(o.faunaFound); o.faunaTotal = toNum(o.faunaTotal); o.resources = (o.resources || []).filter(Boolean); }
-  if (kind === 'find') { if (o.kind !== 'ship' && o.kind !== 'tool') o.cls = ''; if (!o.planetId) o.coords = ''; }
+  if (kind === 'find') {
+    if (!['ship', 'tool', 'fleet'].includes(o.kind)) o.cls = '';
+    if (o.kind === 'fleet') { o.systemId = ''; o.planetId = ''; }   // your own ships live in your freighter, not a system
+    if (!o.planetId) o.coords = '';
+  }
   o.photos = (o.photos || []).filter(validAssetId);
   o.favorite = !!o.favorite;
   return o;
@@ -1181,7 +1198,8 @@ async function submitForm(form) {
   const fail = msg => { form.error = msg; refreshSheet(); const b = $('#sheet-body'); if (b) b.scrollTop = 0; };
   if (form.uploading) return fail('Screenshots are still being added. Save again in a moment.');
   if (!String(d.name || '').trim()) return fail(`Give the ${spec.noun} a name.`);
-  if (form.kind !== 'system' && !isMine(S.systems.get(d.systemId))) return fail('Pick the star system it belongs to.');
+  const needsSystem = form.kind !== 'system' && !(form.kind === 'find' && d.kind === 'fleet');
+  if (needsSystem && !isMine(S.systems.get(d.systemId))) return fail('Pick the star system it belongs to.');
   if (form.kind === 'find' && d.planetId && !isMine(S.planets.get(d.planetId))) d.planetId = '';
   const body = normalize(form.kind, d);
   const now = new Date().toISOString();
@@ -1335,6 +1353,7 @@ function openAdd() {
       <button type="button" class="choice" data-sheet-act="new-system">${starDot('Yellow')}<span><b>Star system</b><small>Just warped in? Start here.</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-planet"${none ? ' disabled' : ''}>${planetDisc({ biome: 'Lush' })}<span><b>Planet or moon</b><small>${sys ? 'In ' + esc(sys.name) : 'Biome, weather, sentinels, resources'}</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-find"${none ? ' disabled' : ''}>${kindTile('creature')}<span><b>Find</b><small>${pl ? 'On ' + esc(pl.name) : sys ? 'In ' + esc(sys.name) : 'Creature, plant, starship, multi-tool, base…'}</small></span></button>
+      <button type="button" class="choice" data-sheet-act="new-fleet">${kindTile('fleet')}<span><b>Ship for my freighter</b><small>A starship or corvette you own</small></span></button>
     </div>${none ? '<p class="muted-note">Planets and finds belong to a star system, so log a system first.</p>' : ''}`;
   } });
 }
@@ -1502,7 +1521,7 @@ document.addEventListener('click', e => {
     case 'back': back(); break;
     case 'open': go(ds.type, ds.id); break;
     case 'add': openAdd(); break;
-    case 'new': openNew(ds.kind, { systemId: ds.system || '', planetId: ds.planet || '' }); break;
+    case 'new': openNew(ds.kind, { systemId: ds.system || '', planetId: ds.planet || '', kind: ds.findKind || '' }); break;
     case 'edit': openEdit(ds.type, ds.id); break;
     case 'fav': toggleFav(ds.type, ds.id); break;
     case 'fauna': bumpFauna(ds.id, Number(ds.delta)); break;
@@ -1557,6 +1576,7 @@ function onSheetClick(e) {
     refreshSheet(); return;
   }
   switch (ds.sheetAct) {
+    case 'new-fleet': openNew('find', { kind: 'fleet' }); break;
     case 'new-system': case 'new-planet': case 'new-find': {
       const ctx = (sheetState && sheetState.ctx) || {};
       openNew(ds.sheetAct.slice(4), ctx); break;
@@ -1793,6 +1813,13 @@ const crew = {
   items: { systems: new Map(), planets: new Map(), finds: new Map() },
   unsubs: [],
 };
+// Your own creature counts for crewmates' planets (planet id → count). Everyone counts what they found.
+const myFauna = new Map();
+let myFaunaT = 0;
+function saveMyFauna() {
+  clearTimeout(myFaunaT);
+  myFaunaT = setTimeout(() => { store.put('meta', 'crew-fauna', Object.fromEntries(myFauna)).catch(() => {}); }, 300);
+}
 const crewOn = () => !!(crew.fb && crew.code && crew.uid);
 const isMine = x => !!x && !x._crew;
 const mineOf = c => all(c).filter(isMine);
@@ -1829,6 +1856,10 @@ function stopCrew() { crew.unsubs.forEach(u => { try { u(); } catch (e) {} }); c
 
 async function restoreCrew() {
   try { crew.name = (await store.get('meta', 'crew-name')) || ''; } catch (e) {}
+  try {
+    const mf = await store.get('meta', 'crew-fauna');
+    if (mf && typeof mf === 'object') for (const [k, v] of Object.entries(mf)) if (Number.isFinite(v)) myFauna.set(k, v);
+  } catch (e) {}
   if (!FIREBASE_CONFIG) return;
   let saved = null;
   try { saved = await store.get('meta', 'crew'); } catch (e) {}
@@ -1886,6 +1917,8 @@ function buildCrewItems() {
     if (typeof v.systemId === 'string' && v.systemId) v.systemId = pre + v.systemId;
     if (typeof v.planetId === 'string' && v.planetId) v.planetId = pre + v.planetId;
     if (d.type === 'find' && !hasOwn(KIND_LABEL, v.kind)) v.kind = 'other';
+    if (d.type === 'find' && v.kind === 'fleet') continue;   // freighters are personal
+    if (d.type === 'planet') v.faunaFound = myFauna.has(v.id) ? myFauna.get(v.id) : null;
     if (!['S', 'A', 'B', 'C'].includes(v.cls)) v.cls = '';
     items[COLL[d.type]].set(v.id, v);
   }
@@ -1905,13 +1938,14 @@ function applyCrew() {
 // Sending your own entries. Screenshots, stars and example entries stay on this phone.
 function shareData(item) {
   const d = Object.assign({}, item);
-  for (const k of ['id', 'photos', 'favorite', 'example', '_crew', '_owner']) delete d[k];
+  for (const k of ['id', 'photos', 'favorite', 'example', '_crew', '_owner', 'faunaFound']) delete d[k];
   return d;
 }
 const crewKey = (type, id) => `${crew.uid}_${type}_${id}`;
 const crewPayload = (type, item) => ({ owner: crew.uid, type, id: item.id, data: shareData(item), updatedAt: item.updatedAt || '' });
 function pushOwn(coll, item) {
   if (!crewOn() || !item || item._crew || item.example) return;
+  if (coll === 'finds' && item.kind === 'fleet') { dropOwn(coll, item.id); return; }   // your freighter stays yours
   const { fs, db } = crew.fb, type = TYPE_OF[coll];
   fs.setDoc(fs.doc(db, 'crews', crew.code, 'items', crewKey(type, item.id)), crewPayload(type, item)).catch(() => {});
 }
@@ -1931,7 +1965,7 @@ async function syncOwn() {
     for (const coll of ['systems', 'planets', 'finds']) {
       const type = TYPE_OF[coll];
       for (const it of mineOf(coll)) {
-        if (it.example) continue;
+        if (it.example || (coll === 'finds' && it.kind === 'fleet')) continue;
         const key = crewKey(type, it.id), r = remote.get(key);
         remote.delete(key);
         if (!r || r.updatedAt !== (it.updatedAt || '')) writes.push(b => b.set(fs.doc(db, 'crews', code, 'items', key), crewPayload(type, it)));
@@ -2054,7 +2088,7 @@ function renderCrewSettings() {
 
 /* ---------- Updates ---------- */
 // Goes up by one with every release. The app compares it with the copy on the website.
-const APP_VERSION = '8';
+const APP_VERSION = '9';
 const INDEX_URL = new URL('./', location.href).href;
 let lastUpdateCheck = 0, freshIndex = null;
 // Resolves with the website's version number, or null when it couldn't check (offline)
