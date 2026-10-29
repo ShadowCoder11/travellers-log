@@ -140,6 +140,15 @@ button:disabled{ cursor:default }
 .badge-cls.s{ color:var(--flare); border-color:color-mix(in srgb, var(--flare) 55%, transparent) }
 .badge .ic{ width:12px; height:12px; stroke-width:3; margin:0 3px 0 -1px }
 .badge-done{ color:var(--scan); border-color:color-mix(in srgb, var(--scan) 45%, transparent) }
+/* Habitable planets: the score, and why */
+.hab-score{ flex:none; width:40px; height:36px; border-radius:10px; display:grid; place-items:center; border:1px solid var(--line); font-family:var(--f-display); font-weight:700; font-size:17px; font-variant-numeric:tabular-nums; color:var(--text) }
+.hab-score.g-excellent{ color:var(--scan); border-color:color-mix(in srgb, var(--scan) 55%, transparent); background:color-mix(in srgb, var(--scan) 12%, transparent) }
+.hab-score.g-good{ color:var(--scan); border-color:color-mix(in srgb, var(--scan) 32%, transparent) }
+.hab-score.g-harsh{ color:var(--warn); border-color:color-mix(in srgb, var(--warn) 40%, transparent) }
+.row-why{ margin-top:2px; font-size:13px; line-height:1.35; color:var(--muted) }
+.row-why .bad{ color:var(--warn) }
+.row-why .none{ color:var(--faint) }
+.section-note{ font-size:13px; color:var(--faint); text-align:right }
 
 /* Log home */
 .totals{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px }
@@ -614,7 +623,7 @@ const S = {
   systems: new Map(), planets: new Map(), finds: new Map(), recipes: new Map(),
   loaded: { systems: false, planets: false, finds: false, recipes: false },
   tab: 'log', stack: [], scrolls: [],
-  filters: { log: '', systems: '', planets: '', finds: '', recipes: '', findKind: 'all', resource: '', sort: { systems: 'recent', planets: 'recent', finds: 'recent' } },
+  filters: { log: '', systems: '', planets: '', finds: '', recipes: '', findKind: 'all', resource: '', habSort: 'best', sort: { systems: 'recent', planets: 'recent', finds: 'recent' } },
   goods: new Set(),             // trade goods you said you're carrying
   tr: { gal: '', code: '', error: '' },   // the address translator's boxes
   settings: { restore: null, busy: '', confirmExamples: false, msg: '', backup: null, usage: '' },
@@ -721,6 +730,7 @@ function renderTop(route) {
   if (route.type === 'find') title = KIND_LABEL[(S.finds.get(route.id) || {}).kind] || 'Find';
   if (route.type === 'resources') title = 'Resource finder';
   if (route.type === 'trade') title = 'Trade routes';
+  if (route.type === 'habitable') title = 'Habitable planets';
   if (route.type === 'translate') title = 'Address translator';
   if (route.type === 'recipes') title = 'Recipe book';
   if (route.type === 'recipe') title = 'Recipe';
@@ -741,6 +751,7 @@ function viewFor(route, X) {
   if (route.type === 'find') return { key: 'f:' + route.id, head: '', body: viewFind(route.id) };
   if (route.type === 'resources') return { key: 'resources', head: '', body: viewResources() };
   if (route.type === 'trade') return { key: 'trade', head: '', body: viewTrade() };
+  if (route.type === 'habitable') return { key: 'habitable', head: '', body: viewHabitable() };
   // The translator's boxes sit in the head, which isn't redrawn while you type
   if (route.type === 'translate') return { key: 'translate', head: translatorHead(), body: `<div id="tr-result">${trResult()}</div>` };
   if (route.type === 'recipes') return { key: 'recipes', head: searchBox('recipes', 'Search dishes and ingredients'), body: viewRecipes() };
@@ -819,7 +830,9 @@ const toolRow = (act, ic, title, sub) => `<button class="row" data-act="${act}">
 function viewTools() {
   const g = gate(); if (g) return g;
   const nr = S.recipes.size;
+  const best = habList().find(x => x.h.ranked);
   return hereSection('tools') + section('Tools', '', listOf([
+    toolRow('habitable', 'planet', 'Habitable planets', best ? `Best so far: ${esc(best.p.name || 'Unnamed')}, ${best.h.score}` : 'The best worlds in your log to live on'),
     toolRow('resources', 'mineral', 'Resource finder', 'Which planets have what you need'),
     toolRow('trade', 'trade', 'Trade routes', 'Where to sell for the most units'),
     toolRow('translate', 'portal', 'Address translator', 'Galactic address to portal glyphs, and back'),
@@ -998,13 +1011,14 @@ function viewPlanet(id, X) {
   const p = S.planets.get(id); if (!p) return missing();
   const sys = S.systems.get(p.systemId);
   const finds = X.fp(id).slice().sort(byRecent);
+  const hab = habitability(p);
   return [
     `<section class="hero" style="--biome:${biomeColor(p.biome)}"><div class="orb planet${p.body === 'Moon' ? ' moon' : ''}" aria-hidden="true"></div>
       <p class="eyebrow">${esc([p.body || 'Planet', p.biome].filter(Boolean).join(' · '))}</p>
       <h2>${esc(p.name || 'Unnamed')}</h2>
       <div class="crumbs">${sys ? `<button class="crumb" data-act="open" data-type="system" data-id="${esc(sys.id)}">${starDot(sys.starColor)}<span>${esc(sys.name)}</span>${icon('chevron')}</button>` : '<span class="badge">Unknown system</span>'}</div>
       ${heroActions('planet', p, faunaDone(p) ? doneBadge() : '')}</section>`,
-    statsBlock([['In-game type', p.description], ['Weather', p.weather], ['Sentinels', withTier(SENTINEL_WORDS, p.sentinels)], ['Flora', withTier(FLORA_WORDS, p.flora)], ['Fauna', withTier(FAUNA_WORDS, p.fauna)]]),
+    statsBlock([['In-game type', p.description], ['Weather', p.weather], ['Sentinels', withTier(SENTINEL_WORDS, p.sentinels)], ['Flora', withTier(FLORA_WORDS, p.flora)], ['Fauna', withTier(FAUNA_WORDS, p.fauna)], ['Habitability', hab && hab.ranked ? `${hab.grade} (${hab.score} of 100)` : '']]),
     faunaBlock(p),
     (p.resources || []).length ? section(`Resources<span class="count">${p.resources.length}</span>`, '', `<div class="tags">${p.resources.map(r => `<span class="tag">${esc(r)}</span>`).join('')}</div>`) : '',
     notesBlock(p.notes),
@@ -1121,7 +1135,7 @@ function hereSection(mode) {
   const what = forTrade && here ? [here.economy || 'Economy not noted', wealthShort(here.wealth)] : [here && here.galaxy, here && (here.region || (here.glyphs ? groupGlyphs(here.glyphs) : ''))];
   const card = here
     ? `<div class="here">${starDot(here.star)}<div><b>${esc(here.name)}</b><small>${esc(what.filter(Boolean).join(' · ') || 'No galaxy or portal address')}</small></div><button class="btn btn-sm" data-act="here-set">Change</button></div>${measured ? '' : `<p class="hint">This system has no portal address in your log, so distances can’t be worked out. Add its glyphs to see how far away other ${forTrade ? 'systems' : 'planets'} are.</p>`}`
-    : `<div class="here">${kindTile('poi')}<div><b>Not set</b><small>${forTrade ? 'Tell the app to plan a route from here' : mode === 'tools' ? 'The resource finder and trade routes use it' : 'Tell the app, and the closest planets show first'}</small></div><button class="btn btn-sm btn-primary" data-act="here-set">Set</button></div>`;
+    : `<div class="here">${kindTile('poi')}<div><b>Not set</b><small>${forTrade ? 'Tell the app to plan a route from here' : mode === 'tools' ? 'Tools use it to work out distances' : 'Tell the app, and the closest planets show first'}</small></div><button class="btn btn-sm btn-primary" data-act="here-set">Set</button></div>`;
   return section('Where you are', here ? '<button class="link-btn" data-act="here-clear">Clear</button>' : '', card);
 }
 
@@ -1145,6 +1159,111 @@ function viewResources() {
   out.push(section(`${esc(sel.label)}<span class="count">${rows.length}</span>`, '',
     listOf(rows.map(({ p, sys, d }) => planetRow(p, true, [d && d.label, sys ? sys.name : 'Unknown system'].filter(Boolean).join(' · ')))) +
     (measured ? '<p class="hint">Closest first. Distances are rough, worked out from portal addresses.</p>' : '')));
+  return out.join('');
+}
+
+/* ---------- Habitable planets ---------- */
+// How good a world is to live on, out of 100. Weather counts most, then biome, sentinels and life.
+// A part that isn't logged counts as middling, so a half-filled planet can't top the list.
+const HAB_WEIGHT = { weather: 30, biome: 25, sentinels: 20, fauna: 15, flora: 10 };
+const HAB_NAME = { weather: 'Weather', biome: 'Biome', sentinels: 'Sentinels', fauna: 'Fauna', flora: 'Flora' };
+const HAB_BIOME = { Lush: 1, Marsh: .85, Waterworld: .8, Exotic: .6, Barren: .5, Dead: .3, Frozen: .25, Scorched: .25, Toxic: .2, Irradiated: .2, Volcanic: .1 };
+const HAB_SENT = { None: [1, 'No sentinels'], Low: [.85, 'Few sentinels'], Standard: [.5, 'Sentinels on patrol'], Aggressive: [.15, 'Aggressive sentinels'], Corrupted: [.1, 'Corrupted sentinels'] };
+const HAB_LIFE = { High: [1, 'Lots of'], Average: [.7, 'Some'], Weird: [.6, 'Strange'], Low: [.4, 'Few'], Infected: [.3, 'Infected'], None: [0, 'No'] };
+// The game's weather words, worst first: the first group that fits wins.
+// "Occasional", "Infrequent" and the like make storms one step milder.
+const WEATHER_LEVELS = [
+  ['none', .4, 'No atmosphere', /no atmosphere|airless|atmosphere.?free|weather.?free|no weather/],
+  ['extreme', 0, 'Extreme weather', /extreme|inferno|lethal|deadly|hazardous|apocalyp|hellish|blasted|incendiary|igniting|superheated|ultratoxic|bone|cyclone|raging|planet.?wide|tempest|howling|volatile|catastroph|intense|whiteout|firestorm|fire storm|burning|boiling|meltdown|violent|blistering|outburst|frenzied/],
+  ['harsh', .35, 'Harsh weather', /storm|blizzard|squall|gale|blast|toxic|caustic|acid|corrosive|radioactiv|radiation|irradiat|contaminat|nuclear|gamma|freez|frozen|\bicy\b|\bice\b|snow|frost|cold|heat|\bhot\b|scorch|swelter|sizzl|smoulder|smolder|ember|torrid|dust|sand|grit|wind|smoke|\bash|unstable|instabil/],
+  ['calm', 1, 'Calm weather', /clear|calm|pleasant|mild|mellow|peaceful|balmy|beautiful|blissful|\bfine\b|\bfair\b|temperate|moderate|perfect|unclouded|refreshing|gentle|sunny|wonderful|lovely|tranquil|serene|ideal|comfortable|breez|\bnice\b/],
+  ['wet', .85, 'Wet weather', /rain|shower|drizzle|downpour|deluge|monsoon|torrent|humid|damp|\bwet\b|mist|fog|cloud|haz[ey]|overcast/],
+];
+const SOFTER = /\b(occasional|infrequent|rare|intermittent|sporadic|irregular|light|slight)/;
+function weatherLevel(w) {
+  const t = norm(w); if (!t) return null;
+  const lv = WEATHER_LEVELS.find(x => x[3].test(t)); if (!lv) return null;
+  const [k, v, label] = lv;
+  if (k === 'extreme' && SOFTER.test(t)) return { k: 'harsh', v: .35, label: 'Harsh weather' };
+  if (k === 'harsh' && SOFTER.test(t)) return { k: 'mild', v: .65, label: 'Occasional storms' };
+  return { k, v, label };
+}
+const habGrade = n => n >= 85 ? 'Excellent' : n >= 70 ? 'Good' : n >= 50 ? 'Fair' : 'Harsh';
+const ownKey = (o, k) => !!k && Object.prototype.hasOwnProperty.call(o, k);
+// null for gas giants, which you can't land on
+function habitability(p) {
+  const biome = ownKey(BIOMES, p.biome) && p.biome !== 'Other' ? p.biome : (biomeMatches(p.description)[0] || '');
+  if (biome === 'Gas Giant') return null;
+  const w = weatherLevel(p.weather);
+  const st = tierOf(SENTINEL_WORDS, p.sentinels), fa = tierOf(FAUNA_WORDS, p.fauna), fl = tierOf(FLORA_WORDS, p.flora);
+  const parts = {
+    weather: w && [w.v, w.label],
+    biome: ownKey(HAB_BIOME, biome) ? [HAB_BIOME[biome], biome] : null,
+    sentinels: ownKey(HAB_SENT, st) ? HAB_SENT[st] : null,
+    fauna: ownKey(HAB_LIFE, fa) ? [HAB_LIFE[fa][0], `${HAB_LIFE[fa][1]} creatures`] : null,
+    flora: ownKey(HAB_LIFE, fl) ? [HAB_LIFE[fl][0], `${HAB_LIFE[fl][1]} plants`] : null,
+  };
+  let score = 0; const missing = [];
+  for (const k of Object.keys(HAB_WEIGHT)) {
+    if (!parts[k]) { missing.push(k); score += HAB_WEIGHT[k] / 2; }
+    else score += HAB_WEIGHT[k] * parts[k][0];
+  }
+  if (/paradise/i.test(p.description || '')) score += 5;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return { score, grade: habGrade(score), biome, parts, missing, ranked: missing.length <= 2 };
+}
+// "Calm weather · Few sentinels · Lots of creatures", with the bad parts picked out
+function habWhy(h) {
+  return ['weather', 'sentinels', 'fauna', 'flora'].map(k => {
+    const part = h.parts[k];
+    if (!part) return `<span class="none">${HAB_NAME[k]} not logged</span>`;
+    return `<span${part[0] < .4 ? ' class="bad"' : ''}>${esc(part[1])}</span>`;
+  }).join(' · ');
+}
+// The score sits where the planet's dot usually goes, so the reasons get the room
+function habRow(p, h, d, near) {
+  const sys = S.systems.get(p.systemId);
+  const where = [near && d ? d.label : '', h.biome || (p.body === 'Moon' ? 'Moon' : 'Planet'), sys ? sys.name : 'Unknown system', !near && d ? d.label : ''].filter(Boolean).join(' · ');
+  const lead = h.ranked ? `<span class="hab-score g-${h.grade.toLowerCase()}" title="${h.grade}, ${h.score} of 100"><span class="vh">${h.grade}, </span>${h.score}<span class="vh"> of 100</span></span>` : planetIcon(p);
+  const why = h.ranked ? habWhy(h) : `<span class="none">Not logged: ${h.missing.map(k => HAB_NAME[k].toLowerCase()).join(', ')}</span>`;
+  return `<button class="row" data-act="open" data-type="planet" data-id="${esc(p.id)}">${lead}<span class="row-main"><span class="row-title">${esc(p.name || 'Unnamed')}</span><span class="row-sub">${esc(where)}</span><span class="row-why">${why}</span></span>${rowEnd(p)}</button>`;
+}
+// Every planet and moon you can land on, scored, best first
+function habList() {
+  return all('planets').map(p => ({ p, h: habitability(p) })).filter(x => x.h)
+    .sort((a, b) => (b.h.score - a.h.score) || (a.h.missing.length - b.h.missing.length) || byName(a.p, b.p));
+}
+function viewHabitable() {
+  const g = gate(); if (g) return g;
+  const list = habList(), ranked = list.filter(x => x.h.ranked), thin = list.filter(x => !x.h.ranked);
+  if (!list.length) return emptyState('No planets logged yet', 'Add planets and moons with their weather, sentinels and life, and this page ranks the best places to live.', '');
+  const here = hereInfo(), near = !!here && S.filters.habSort === 'near';
+  const out = [];
+  const bar = `<div class="list-bar"><span class="count">${plural(ranked.length, 'world')} ranked</span>${here ? `<div class="seg" role="group" aria-label="Sort order">${[['best', 'Best'], ['near', 'Closest']].map(([v, l]) => `<button class="seg-btn" data-act="hab-sort" data-sort="${v}" aria-pressed="${(v === 'near') === near}">${l}</button>`).join('')}</div>` : ''}</div>`;
+  if (!ranked.length) {
+    out.push(`<p class="muted-note">None of your worlds have enough details to rank yet. Add their weather, sentinels and life in Edit.</p>`);
+  } else if (near) {
+    const good = ranked.filter(x => x.h.score >= 70).map(x => Object.assign(x, { d: distanceFrom(here, S.systems.get(x.p.systemId)) }))
+      .sort((a, b) => (a.d.rank - b.d.rank) || ((a.d.dist || 0) - (b.d.dist || 0)) || (b.h.score - a.h.score));
+    out.push(bar);
+    out.push(section(`Good worlds, closest first<span class="count">${good.length}</span>`, '', good.length
+      ? listOf(good.map(x => habRow(x.p, x.h, x.d, true))) + (regionOf(here.glyphs) ? '' : '<p class="hint">This system has no portal address in your log, so distances can’t be worked out.</p>')
+      : '<p class="muted-note">None of your worlds score Good or better yet. Switch to Best to see the rest.</p>'));
+  } else {
+    out.push(bar);
+    const groups = [['Excellent', 'Calm, safe and full of life'], ['Good', 'Easy to live on'], ['Fair', 'Liveable, with a catch'], ['Harsh', 'Hard going']];
+    for (const [grade, blurb] of groups) {
+      const rows = ranked.filter(x => x.h.grade === grade); if (!rows.length) continue;
+      out.push(section(`${grade}<span class="count">${rows.length}</span>`, `<span class="section-note">${blurb}</span>`,
+        listOf(rows.map(x => habRow(x.p, x.h, here ? distanceFrom(here, S.systems.get(x.p.systemId)) : null, false)))));
+    }
+  }
+  if (thin.length) {
+    out.push(section(`Need more details<span class="count">${thin.length}</span>`, '',
+      listOf(thin.map(x => habRow(x.p, x.h, null, false))) +
+      '<p class="hint">Add their weather, sentinels and life in Edit to rank them.</p>'));
+  }
+  out.push(`<p class="hint">Scores are out of 100. Weather counts most, then biome, sentinels and life. Anything not logged counts as middling.${here ? '' : ' Set where you are on the Tools tab to see how far away each world is.'}</p>`);
   return out.join('');
 }
 
@@ -2319,6 +2438,8 @@ document.addEventListener('click', e => {
     case 'kind': S.filters.findKind = ds.kind; render(); break;
     case 'resources': go('resources'); break;
     case 'trade': go('trade'); break;
+    case 'habitable': go('habitable'); break;
+    case 'hab-sort': S.filters.habSort = ds.sort; render(); break;
     case 'translate': go('translate'); break;
     case 'photo-planet': openPhotoPlanet({ systemId: ds.system || '' }); break;
     case 'tr-key': {
@@ -2982,7 +3103,7 @@ function renderCrewSettings() {
 
 /* ---------- Updates ---------- */
 // Goes up by one with every release. The app compares it with the copy on the website.
-const APP_VERSION = '15';
+const APP_VERSION = '16';
 const INDEX_URL = new URL('./', location.href).href;
 let lastUpdateCheck = 0, freshIndex = null;
 // Resolves with the website's version number, or null when it couldn't check (offline)
