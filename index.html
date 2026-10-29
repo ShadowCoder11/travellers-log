@@ -214,6 +214,11 @@ button:disabled{ cursor:default }
 .chip-box .guide-sub{ margin:4px 2px 8px }
 .chip-box .chips + .guide-sub{ margin-top:14px }
 .tr{ display:grid; gap:22px }
+/* Planet from a photo */
+.ocr-preview{ display:block; width:100%; max-height:240px; object-fit:contain; border-radius:var(--r-m); background:#000 }
+.ocr-text{ margin:0; max-height:200px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-family:var(--f-mono); font-size:12px; line-height:1.45; color:var(--muted) }
+.photo-note{ margin:0; font-size:14px; color:var(--text) }
+.banner .guide{ background:transparent }
 .pct{ display:flex; align-items:center; gap:6px }
 .pct > span{ flex:none; font-family:var(--f-mono); font-weight:600; color:var(--muted) }
 .pct .input{ flex:1 }
@@ -983,7 +988,7 @@ function viewSystem(id, X) {
     statsBlock([['Spectral class', s.starClass, 'mono'], ['Lifeform', s.lifeform], ['Economy', withTier(ECON_GROUPS, s.economy)], ['Wealth', labelOf(WEALTH, s.wealth)], ['Trade prices', tradeMods(s)], ['Conflict', labelOf(CONFLICT, s.conflict)]]),
     notesBlock(s.notes),
     photosBlock(s.photos),
-    section(`Planets & moons<span class="count">${planets.length}</span>`, isMine(s) ? newLink('planet', 'Add', { system: id }) : '', planets.length ? listOf(planets.map(p => planetRow(p, false))) : '<p class="muted-note">No planets logged in this system yet.</p>'),
+    section(`Planets & moons<span class="count">${planets.length}</span>`, isMine(s) && S.canWrite ? `<span class="section-acts"><button class="link-btn" data-act="photo-planet" data-system="${esc(id)}">${icon('camera')}From photo</button>${newLink('planet', 'Add', { system: id })}</span>` : '', planets.length ? listOf(planets.map(p => planetRow(p, false))) : '<p class="muted-note">No planets logged in this system yet.</p>'),
     section(`Finds<span class="count">${finds.length}</span>`, isMine(s) ? newLink('find', 'Add', { system: id }) : '', finds.length ? listOf(finds.map(f => findRow(f))) : '<p class="muted-note">No finds logged in this system yet.</p>'),
     metaLine(s),
   ].join('');
@@ -1399,6 +1404,238 @@ function trFromCode(code, from) {
   updateTranslator(from);
 }
 
+/* ---------- Planet from a photo ---------- */
+// Reads the words on a photo or screenshot of a planet's Discoveries page (or a scan) on this phone,
+// with the free Tesseract.js text reader, then opens a filled-in New planet form to check.
+// The reader downloads once (about 7 MB) and is kept by the browser; the photo never leaves the phone.
+const OCR_LIB = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+let ocrLoading = null, ocrRun = 0;
+function loadOcr() {
+  if (!ocrLoading) ocrLoading = new Promise((res, rej) => {
+    if (window.Tesseract) { res(window.Tesseract); return; }
+    const s = document.createElement('script');
+    s.src = OCR_LIB; s.async = true; s.crossOrigin = 'anonymous';
+    s.onload = () => window.Tesseract ? res(window.Tesseract) : rej(new Error('no reader'));
+    s.onerror = () => rej(new Error('load'));
+    document.head.appendChild(s);
+  }).catch(e => { ocrLoading = null; throw e; });
+  return ocrLoading;
+}
+const loadImage = file => new Promise((res, rej) => {
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onload = () => { URL.revokeObjectURL(url); res(img); };
+  img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('image')); };
+  img.src = url;
+});
+// Two versions of the picture: as it is, and greyscale-inverted with more contrast
+// (the game's light text on dark reads better as dark text on light)
+function ocrCanvases(img) {
+  const scale = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const make = invert => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, w, h);
+    if (invert) {
+      const d = x.getImageData(0, 0, w, h), p = d.data;
+      for (let i = 0; i < p.length; i += 4) { const v = Math.max(0, Math.min(255, (195 - Math.max(p[i], p[i + 1], p[i + 2])) * 1.6)); p[i] = p[i + 1] = p[i + 2] = v; }
+      x.putImageData(d, 0, 0);
+    }
+    return c;
+  };
+  return [make(false), make(true)];
+}
+
+// Edit distance, for words the reader gets slightly wrong ("Sentlnels")
+function lev(a, b) {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return a.length || b.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+const ocrClean = s => String(s || '').replace(/[^A-Za-z0-9'’\/ -]+/g, ' ').replace(/\s+/g, ' ').trim();
+const nearly = (a, b) => { a = a.toLowerCase(); b = b.toLowerCase(); if (a === b) return true; const n = Math.max(a.length, b.length); return n >= 5 && lev(a, b) <= (n >= 8 ? 2 : 1); };
+const titleCase = s => s.toLowerCase().replace(/(^|[\s-])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+// "Weather", "Sentinels", "Flora", "Fauna" at the start of a line, plus anything after it on the same line
+function ocrLabel(line) {
+  const words = line.split(' ');
+  const first = (words[0] || '').toLowerCase().replace(/[^a-z]/g, '');
+  const label = ['weather', 'sentinels', 'flora', 'fauna'].find(l => first && nearly(first, l));
+  return label ? { label, rest: words.slice(1).join(' ') } : null;
+}
+const isResourceLine = l => { const t = ' ' + l.toLowerCase() + ' '; return RESOURCES.some(r => t.includes(' ' + r.toLowerCase() + ' ')); };
+// The game's word for sentinels, flora or fauna in a line, spelled the way the app lists it
+function knownWord(line, groups) {
+  const t = ' ' + line.toLowerCase() + ' ';
+  let best = '';
+  for (const [, , ws] of groups) for (const w of ws) if (w.length > best.length && t.includes(' ' + w.toLowerCase() + ' ')) best = w;
+  if (best) return best;
+  if (line.length < 5 || line.length > 30) return '';
+  for (const [, , ws] of groups) for (const w of ws) if (nearly(line, w)) return w;
+  return '';
+}
+const NOT_NAMES = /^(planet data|resources|discoveries|catalogue|milestones|guide|options|log|waypoints|minerals|flora|fauna|discovered.*|return|online.*)$/i;
+const looksLikeName = l => l.length >= 3 && l.length <= 32 && /^[A-Za-z0-9' -]+$/.test(l) && (l.match(/[A-Za-z]/g) || []).length >= 3 && !ocrLabel(l) && !NOT_NAMES.test(l);
+const weatherLine = l => !isResourceLine(l) && /^[A-Za-z][A-Za-z' -]{2,38}[A-Za-z]$/.test(l) && l.split(' ').length <= 4 && (l.match(/[A-Za-z]/g) || []).length >= 4 && !NOT_NAMES.test(l) ? titleCase(l) : '';
+
+// Everything one reading of the picture says about the planet
+function parsePlanetText(text) {
+  const f = {};
+  const lines = String(text || '').split(/\r?\n/).map(ocrClean).filter(l => l.length >= 2);
+  const labels = lines.map(ocrLabel);
+  // The name is the big title just above "Discovered … ago by …" (or above "Planet Data")
+  const anchor = [lines.findIndex(l => /\b(ago|discovered by|uploaded by)\b/i.test(l)), lines.findIndex(l => /^planet data/i.test(l))].find(i => i > 0);
+  if (anchor) for (let j = anchor - 1; j >= Math.max(0, anchor - 3); j--) if (looksLikeName(lines[j])) { f.name = lines[j]; break; }
+  // Some screens show names in capitals: "NARVAX ULTIMA XI" becomes "Narvax Ultima XI"
+  if (f.name && f.name === f.name.toUpperCase()) f.name = f.name.split(' ').map(w => /^[IVXL]+$/.test(w) ? w : titleCase(w)).join(' ');
+  // A planet type like "Hiemal Planet" gives the biome (the shortest phrase that still names one)
+  for (const l of lines) {
+    const m = l.match(/((?:[A-Za-z-]+ ){0,3})(Planet|Moon|World)\b/i); if (!m) continue;
+    const words = m[1].trim().split(' ').filter(Boolean);
+    for (let s = words.length - 1; s >= 0; s--) {
+      const phrase = [...words.slice(s), m[2]].join(' '), b = biomeMatches(phrase);
+      if (b.length) { f.description = titleCase(phrase); f.biome = b[0]; f.body = /moon$/i.test(phrase) ? 'Moon' : 'Planet'; break; }
+    }
+    if (f.description) break;
+  }
+  // Planet data: each label, then the first line after it that fits
+  const at = label => labels.findIndex(x => x && x.label === label);
+  const pick = (label, test) => {
+    const i = at(label); if (i < 0) return ['', -1];
+    if (labels[i].rest) { const v = test(labels[i].rest); if (v) return [v, i]; }
+    for (let j = i + 1; j < Math.min(lines.length, i + 7); j++) {
+      if (labels[j] || isResourceLine(lines[j])) continue;
+      const v = test(lines[j]); if (v) return [v, j];
+    }
+    return ['', -1];
+  };
+  const [weather, iw] = pick('weather', weatherLine);
+  let [sentinels] = pick('sentinels', l => knownWord(l, SENTINEL_WORDS));
+  const [flora] = pick('flora', l => knownWord(l, FLORA_WORDS));
+  const [fauna] = pick('fauna', l => knownWord(l, FAUNA_WORDS));
+  // The sentinels label is often misread: look between the weather and the flora instead
+  if (!sentinels && iw >= 0) {
+    const fl = at('flora'), end = fl > iw ? fl : Math.min(lines.length, iw + 7);
+    for (let j = iw + 1; j < end && !sentinels; j++) if (!isResourceLine(lines[j])) sentinels = knownWord(lines[j], SENTINEL_WORDS);
+  }
+  Object.assign(f, { weather, sentinels, flora, fauna });
+  // "0 / 5 Discovered" under Fauna
+  const fc = String(text || '').match(/(\d{1,3})\s*[\/|Il]\s*(\d{1,3})\s*Discover/i);
+  if (fc && +fc[2] > 0 && +fc[1] <= +fc[2]) { f.faunaFound = +fc[1]; f.faunaTotal = +fc[2]; }
+  // Resources, longest names first so "Activated Copper" isn't also counted as "Copper"
+  let all = ' ' + lines.join(' | ').toLowerCase() + ' ';
+  f.resources = [];
+  for (const r of [...RESOURCES].sort((a, b) => b.length - a.length)) {
+    const k = ' ' + r.toLowerCase() + ' ';
+    if (all.includes(k)) { f.resources.push(r); all = all.split(k).join(' | '); }
+  }
+  return f;
+}
+// Combines several readings: the first one to find a field wins, resources add up
+function readPlanet(texts) {
+  const out = {}, res = new Set();
+  for (const t of texts) {
+    for (const [k, v] of Object.entries(parsePlanetText(t))) {
+      if (k === 'resources') v.forEach(r => res.add(r));
+      else if (v !== '' && v != null && out[k] == null) out[k] = v;
+    }
+  }
+  if (res.size) out.resources = RESOURCES.filter(r => res.has(r));
+  return out;
+}
+const FOUND_LABELS = [['name', 'name'], ['description', 'type'], ['biome', 'biome'], ['weather', 'weather'], ['sentinels', 'sentinels'], ['flora', 'flora'], ['fauna', 'fauna'], ['faunaTotal', 'creature count'], ['resources', 'resources']];
+function photoNote(note) {
+  if (!note) return '';
+  const what = note.found.length
+    ? `<b>Filled in from ${note.from}:</b> ${esc(note.found.join(', '))}. Check them, and the star system, before saving.`
+    : `<b>Couldn’t read any planet details from ${note.from}.</b> Fill them in by hand${note.from === 'your photo' ? '. The photo is attached' : ''}.`;
+  return `<div class="banner col"><div><p class="photo-note">${what}</p></div>${note.text ? `<details class="guide"><summary>What the app read</summary><div class="guide-body"><pre class="ocr-text">${esc(note.text)}</pre></div></details>` : ''}</div>`;
+}
+// Opens the New planet form with whatever was found
+function openPlanetFrom(found, ctx, from, text, uploads) {
+  const draft = {};
+  for (const k of ['name', 'description', 'biome', 'body', 'weather', 'sentinels', 'flora', 'fauna']) if (found[k]) draft[k] = found[k];
+  if (found.faunaTotal) { draft.faunaFound = String(found.faunaFound || 0); draft.faunaTotal = String(found.faunaTotal); }
+  if (found.resources) draft.resources = found.resources;
+  if (uploads && uploads.length) draft.photos = [...uploads];
+  const list = FOUND_LABELS.filter(([k]) => found[k] && (k !== 'resources' || found.resources.length)).map(([k, l]) => k === 'resources' ? `${plural(found.resources.length, 'resource')}` : l);
+  closeSheet();
+  openNew('planet', ctx, { draft, uploads, note: { found: list, text, from } });
+}
+
+function openPhotoPlanet(ctx) {
+  if (!S.canWrite || S.status !== 'ready') return;
+  if (!mineOf('systems').length) { openNew('system', {}); return; }
+  ctx = Object.assign({}, ctx);
+  if (ctx.systemId && !isMine(S.systems.get(ctx.systemId))) ctx.systemId = '';
+  openSheet({ title: 'Planet from a photo', cancelLabel: 'Cancel', ctx, ocr: { stage: 'pick', msg: '', preview: '' }, render: renderPhotoSheet, onCancel: () => { ocrRun++; const o = sheetState && sheetState.ocr; if (o && o.preview) URL.revokeObjectURL(o.preview); } });
+}
+function renderPhotoSheet() {
+  const o = sheetState.ocr;
+  if (o.stage === 'reading') {
+    return `<div class="stack">${o.preview ? `<img class="ocr-preview" src="${esc(o.preview)}" alt="Your photo">` : ''}<div class="loading" role="status"><span class="pulse"></span><span id="ocr-progress">${esc(o.msg)}</span></div></div>`;
+  }
+  return `${o.stage === 'error' ? `<div class="form-error" role="alert">${esc(o.msg)}</div>` : ''}
+    <p class="muted-note">Take a photo of the planet’s page in the Discoveries menu, or pick a screenshot of it. The app reads the words and fills in a new planet for you to check.</p>
+    <label class="btn btn-primary">${icon('camera')}Take or choose a photo<input type="file" accept="image/*" id="ocr-in" class="vh"></label>
+    <p class="hint">Screenshots work best. For a photo of your TV, get close so the planet’s details fill the picture, and hold still so it’s sharp. The first time, the app downloads its text reader (about 7 MB), then keeps it. Your photo stays on your phone.</p>
+    <details class="guide"><summary>Or paste the text instead</summary><div class="guide-body">
+      <p>On iPhone, open the screenshot in Photos, press and hold on the text, tap Select All, then Copy, and paste it here.</p>
+      <textarea class="input" id="ocr-paste" rows="5" placeholder="Paste the planet’s details"></textarea>
+      <button type="button" class="btn" data-sheet-act="ocr-paste-go">Fill in from this text</button>
+    </div></details>`;
+}
+function setOcrMsg(msg) {
+  const o = sheetState && sheetState.ocr; if (!o) return;
+  o.msg = msg;
+  const el = $('#ocr-progress'); if (el) el.textContent = msg;
+}
+async function readPhotoPlanet(file) {
+  const st = sheetState; if (!st || !st.ocr || !file) return;
+  const run = ++ocrRun, alive = () => run === ocrRun && sheetState === st;
+  st.ocr = { stage: 'reading', msg: 'Getting the text reader ready…', preview: URL.createObjectURL(file) };
+  refreshSheet();
+  let worker = null;
+  try {
+    const T = await loadOcr();
+    const img = await loadImage(file);
+    if (!alive()) return;
+    let pass = 0;
+    worker = await T.createWorker('eng', 1, { logger: m => { if (m.status === 'recognizing text' && alive()) setOcrMsg(`Reading the photo… ${Math.round((pass + m.progress) * 50)}%`); } });
+    if (!alive()) return;
+    // Game screens are scattered words, not paragraphs
+    await worker.setParameters({ tessedit_pageseg_mode: '11' });
+    const texts = [];
+    for (const c of ocrCanvases(img)) { setOcrMsg(`Reading the photo… ${pass * 50}%`); texts.push((await worker.recognize(c)).data.text); pass++; if (!alive()) return; }
+    setOcrMsg('Filling in the planet…');
+    // Keep the photo with the new planet, like a screenshot added by hand
+    const blob = await shrink(file);
+    const type = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(blob.type) ? blob.type : '';
+    const uploads = [];
+    if (type) {
+      const id = newId();
+      await store.put('photos', id, { blob, type, createdAt: new Date().toISOString() });
+      photoUrls.set(id, URL.createObjectURL(blob));
+      uploads.push(id);
+    }
+    if (!alive()) { uploads.forEach(dropAsset); return; }
+    URL.revokeObjectURL(st.ocr.preview);
+    openPlanetFrom(readPlanet(texts), st.ctx, 'your photo', texts[0].trim(), uploads);
+  } catch (e) {
+    if (!alive()) return;
+    st.ocr = { stage: 'error', preview: '', msg: e && e.message === 'image' ? 'That photo couldn’t be opened. Try a PNG or JPEG screenshot.'
+      : e && (e.message === 'load' || e.message === 'no reader') ? 'Couldn’t download the text reader. Check your internet connection and try again. It’s only downloaded once.'
+      : 'Couldn’t read that photo. Try again, or paste the text instead.' };
+    refreshSheet();
+  } finally {
+    if (worker) worker.terminate().catch(() => {});
+  }
+}
+
 /* ---------- Sheets ---------- */
 let sheetState = null;
 function openSheet(opts) {
@@ -1452,7 +1689,7 @@ const SPECS = {
     { k: 'name', t: 'text', label: 'Name', required: true, placeholder: 'As shown in the Discoveries menu' },
     { k: 'body', t: 'chips', label: 'Body', options: ['Planet', 'Moon'], noClear: true },
     { row: [ { k: 'description', t: 'text', label: 'In-game type', list: PLANET_TYPES, placeholder: 'Paradise Planet' }, { k: 'weather', t: 'text', label: 'Weather', list: WEATHER } ] },
-    { k: 'biome', t: 'chips', label: 'Biome', options: Object.keys(BIOMES), swatch: biomeColor },
+    { k: 'biome', t: 'chips', label: 'Biome', options: Object.keys(BIOMES), swatch: biomeColor, hint: 'Picked for you from the in-game type. Tap another to change it.' },
     { k: 'biomeGuide', t: 'biomeGuide' },
     { k: 'sentinels', t: 'words', label: 'Sentinels', groups: SENTINEL_WORDS, hint: 'Pick the word the game shows. The list runs from no sentinels to corrupted ones.' },
     { row: [ { k: 'flora', t: 'words', label: 'Flora', groups: FLORA_WORDS }, { k: 'fauna', t: 'words', label: 'Fauna', groups: FAUNA_WORDS } ] },
@@ -1505,17 +1742,20 @@ function blankDraft(kind, ctx) {
   return { kind: ctx.kind || 'creature', name: '', systemId, planetId: ctx.planetId || '', cls: '', subtype: '', coords: '', notes: '', photos: [], favorite: false };
 }
 
-function openForm(kind, existing, ctx) {
+// `preset` (new entries only): { draft: fields to fill in, uploads: screenshot ids already added, note: { found, text, from } }
+function openForm(kind, existing, ctx, preset) {
   const spec = SPECS[kind];
-  const draft = existing ? JSON.parse(JSON.stringify(existing)) : blankDraft(kind, ctx || {});
+  const draft = existing ? JSON.parse(JSON.stringify(existing)) : Object.assign(blankDraft(kind, ctx || {}), preset && preset.draft);
   delete draft.id;
   if (!Array.isArray(draft.photos)) draft.photos = [];
   if (kind === 'planet' && !Array.isArray(draft.resources)) draft.resources = [];
   if (kind === 'recipe' && !Array.isArray(draft.ingredients)) draft.ingredients = [];
-  const form = { kind, id: existing ? existing.id : null, draft, uploads: [], removed: [], uploading: 0, confirmDelete: false, error: '', saving: false };
+  const form = { kind, id: existing ? existing.id : null, draft, uploads: preset && preset.uploads ? [...preset.uploads] : [], removed: [], uploading: 0, confirmDelete: false, error: '', saving: false, note: (preset && preset.note) || null };
+  // The biome the app picked from the in-game type. A biome you tap yourself is never changed.
+  if (kind === 'planet') form.autoBiome = draft.biome && biomeMatches(draft.description).includes(draft.biome) ? draft.biome : '';
   openSheet({ title: `${existing ? 'Edit' : 'New'} ${spec.noun}`, tall: true, form, render: () => renderForm(form), onSave: () => submitForm(form), onCancel: () => discardUploads(form) });
 }
-function openNew(kind, ctx) {
+function openNew(kind, ctx, preset) {
   if (!S.canWrite || S.status !== 'ready') return;
   // Planets and finds need a system to go in (recipes and your freighter's ships don't)
   if ((kind === 'planet' || (kind === 'find' && !(ctx && ctx.kind === 'fleet'))) && !mineOf('systems').length) kind = 'system';
@@ -1523,7 +1763,7 @@ function openNew(kind, ctx) {
   ctx = Object.assign({}, ctx);
   if (ctx.systemId && !isMine(S.systems.get(ctx.systemId))) ctx.systemId = '';
   if (ctx.planetId && !isMine(S.planets.get(ctx.planetId))) ctx.planetId = '';
-  openForm(kind, null, ctx);
+  openForm(kind, null, ctx, preset);
 }
 function openEdit(type, id) {
   const item = S[COLL[type]].get(id);
@@ -1535,7 +1775,7 @@ function renderForm(form) {
   const spec = SPECS[form.kind];
   const err = form.error ? `<div class="form-error" role="alert">${esc(form.error)}</div>` : '';
   const del = form.id ? `<div class="danger-zone"><button type="button" class="btn btn-danger" data-sheet-act="ask-delete">${icon('trash')}Delete this ${spec.noun}</button></div>` : '';
-  return err + spec.fields.map(f => renderField(f, form)).join('') + del;
+  return err + photoNote(form.note) + spec.fields.map(f => renderField(f, form)).join('') + del;
 }
 
 function renderField(f, form) {
@@ -1659,6 +1899,18 @@ function guideHint(d) {
 function guideList(d) {
   const m = biomeMatches(d.description);
   return BIOME_WORDS.map(([b, ws, note]) => `<button type="button" class="guide-row${m.includes(b) ? ' match' : ''}" data-pick-biome="${esc(b)}" aria-pressed="${d.biome === b}"><span class="sw" style="--sw:${biomeColor(b)}"></span><span><b>${esc(b)}</b>${m.includes(b) ? '<em>matches your type</em>' : ''}<small>${esc(note || ws.join(', '))}</small></span></button>`).join('');
+}
+// Typing the in-game type picks the biome it names ("Hiemal Planet" → Frozen), unless you chose one yourself.
+// Words that fit two biomes ("Tropical") pick the first; the guide shows the other.
+function autoPickBiome(form) {
+  const d = form.draft;
+  if (d.biome && d.biome !== form.autoBiome) return;
+  const next = biomeMatches(d.description)[0] || '';
+  form.autoBiome = next;
+  if (next === d.biome) return;
+  d.biome = next;
+  // Flip the chips in place, so the keyboard stays on the type box
+  document.querySelectorAll('#sheet-body [data-chip="biome"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === next)));
 }
 // Typing the in-game type re-highlights the guide without redrawing the whole form
 function updateBiomeGuide(form) {
@@ -1881,6 +2133,7 @@ function openAdd() {
     return `<div class="choices">
       <button type="button" class="choice" data-sheet-act="new-system">${starDot('Yellow')}<span><b>Star system</b><small>Just warped in? Start here.</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-planet"${none ? ' disabled' : ''}>${planetDisc({ biome: 'Lush' })}<span><b>Planet or moon</b><small>${sys ? 'In ' + esc(sys.name) : 'Biome, weather, sentinels, resources'}</small></span></button>
+      <button type="button" class="choice" data-sheet-act="new-photo-planet"${none ? ' disabled' : ''}><span class="kind-tile" aria-hidden="true">${icon('camera')}</span><span><b>Planet from a photo</b><small>Snap its Discoveries page and the app fills it in</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-find"${none ? ' disabled' : ''}>${kindTile('creature')}<span><b>Find</b><small>${pl ? 'On ' + esc(pl.name) : sys ? 'In ' + esc(sys.name) : 'Creature, plant, starship, multi-tool, base…'}</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-fleet">${kindTile('fleet')}<span><b>Ship for my freighter</b><small>A starship or corvette you own</small></span></button>
       <button type="button" class="choice" data-sheet-act="new-recipe"><span class="kind-tile" aria-hidden="true">${icon('recipe')}</span><span><b>Recipe</b><small>${crew.code ? 'A dish for the crew’s recipe book' : 'A dish for your recipe book'}</small></span></button>
@@ -2067,6 +2320,7 @@ document.addEventListener('click', e => {
     case 'resources': go('resources'); break;
     case 'trade': go('trade'); break;
     case 'translate': go('translate'); break;
+    case 'photo-planet': openPhotoPlanet({ systemId: ds.system || '' }); break;
     case 'tr-key': {
       const c = S.tr.code;
       trFromCode(ds.g === 'del' ? c.slice(0, -1) : (c.length < 12 ? c + ds.g : c), 'pad');
@@ -2133,6 +2387,13 @@ function onSheetClick(e) {
   switch (ds.sheetAct) {
     case 'new-fleet': openNew('find', { kind: 'fleet' }); break;
     case 'new-recipe': openNew('recipe', {}); break;
+    case 'new-photo-planet': openPhotoPlanet((sheetState && sheetState.ctx) || {}); break;
+    case 'ocr-paste-go': {
+      const ta = $('#ocr-paste'), text = ta ? ta.value.trim() : '';
+      if (!text) { toast('Paste the planet’s details first'); break; }
+      openPlanetFrom(readPlanet([text]), (sheetState && sheetState.ctx) || {}, 'the text you pasted', '', []);
+      break;
+    }
     case 'new-system': case 'new-planet': case 'new-find': {
       const ctx = (sheetState && sheetState.ctx) || {};
       openNew(ds.sheetAct.slice(4), ctx); break;
@@ -2212,12 +2473,13 @@ document.addEventListener('input', e => {
     return;
   }
   if (t.matches('input[data-k], textarea[data-k]')) form.draft[t.dataset.k] = t.value;
-  if (t.dataset.k === 'description') updateBiomeGuide(form);
+  if (t.dataset.k === 'description') { autoPickBiome(form); updateBiomeGuide(form); }
 });
 
 document.addEventListener('change', e => {
   const t = e.target, form = sheetState && sheetState.form;
   if (t.id === 'f-photos-in') { if (form && S.assets && t.files.length) addPhotos(form, t.files); t.value = ''; return; }
+  if (t.id === 'ocr-in') { const f = t.files[0]; t.value = ''; if (f) readPhotoPlanet(f); return; }
   if (t.id === 'restore-in') { loadRestore(t.files[0]); t.value = ''; return; }
   if (form && t.dataset.words) {
     const k = t.dataset.words;
@@ -2720,7 +2982,7 @@ function renderCrewSettings() {
 
 /* ---------- Updates ---------- */
 // Goes up by one with every release. The app compares it with the copy on the website.
-const APP_VERSION = '13';
+const APP_VERSION = '15';
 const INDEX_URL = new URL('./', location.href).href;
 let lastUpdateCheck = 0, freshIndex = null;
 // Resolves with the website's version number, or null when it couldn't check (offline)
